@@ -2,8 +2,17 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Atualiza cookies de sessão a cada request. Sem isso, o Supabase
- * não consegue renovar o JWT silenciosamente em rotas Server.
+ * Atualiza cookies de sessão + redireciona conforme rota e estado.
+ *
+ * Rotas:
+ *   - públicas: /, /login, /invite/*, /api/health
+ *   - auth-only: /auth/*
+ *   - agência:   /dashboard/**  /onboarding  /api/(meta|clients|org|accounts)
+ *   - cliente:   /portal/**     /api/portal/*
+ *
+ * Se um cliente tentar acessar área de agência (ou vice-versa) → redireciona.
+ * Decisão fina de papel acontece nas APIs via requireAgency/requireClient.
+ * Aqui o middleware só faz hard-stops óbvios baseado em login + path.
  */
 export async function updateSession(request: NextRequest) {
     let response = NextResponse.next({ request });
@@ -24,18 +33,20 @@ export async function updateSession(request: NextRequest) {
     );
 
     const { data: { user } } = await supabase.auth.getUser();
-
     const path = request.nextUrl.pathname;
-    const isAuthRoute = path.startsWith("/login") || path.startsWith("/auth");
-    const isPublicRoute = path === "/" || path.startsWith("/api/health");
-    const isProtectedRoute = !isAuthRoute && !isPublicRoute;
 
-    if (!user && isProtectedRoute) {
+    const isPublic = path === "/" || path.startsWith("/api/health") || path.startsWith("/invite");
+    const isAuth   = path.startsWith("/login") || path.startsWith("/auth");
+
+    if (!user) {
+        if (isPublic || isAuth) return response;
         const url = request.nextUrl.clone();
         url.pathname = "/login";
         url.searchParams.set("next", path);
         return NextResponse.redirect(url);
     }
 
+    // Logado. Não redirecionamos cliente↔agência aqui pra evitar query de DB no middleware;
+    // as APIs e páginas resolvem o papel correto via resolveSession() e direcionam.
     return response;
 }

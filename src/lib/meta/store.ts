@@ -1,8 +1,10 @@
 /**
- * Helpers server-only para ler/salvar credenciais e tokens Meta do usuário logado.
- * Usa service_role pra bypassar RLS apenas para o user_id do JWT atual.
+ * Persistência das credenciais Meta da ORGANIZAÇÃO (não mais por user).
+ * Agência cadastra App ID + Secret no perfil da org → secret AES-256-GCM.
+ *
+ * Usa service_role pra bypassar RLS apenas após resolver a org do user logado.
  */
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { encrypt, decrypt } from "@/lib/crypto";
 
 export interface MetaCredentials {
@@ -21,30 +23,26 @@ export interface MetaTokenRow {
     refreshed_at: string;
 }
 
-export async function getCurrentUserId(): Promise<string | null> {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    return user?.id ?? null;
-}
-
-export async function saveMetaCredentials(userId: string, creds: { appId: string; appSecret: string; appName?: string; redirectUri: string }) {
+export async function saveMetaCredentials(orgId: string, creds: {
+    appId: string; appSecret: string; appName?: string; redirectUri: string;
+}) {
     const svc = createServiceClient();
     const { error } = await svc.from("meta_credentials").upsert({
-        user_id: userId,
+        org_id: orgId,
         app_id: creds.appId,
         app_secret_encrypted: encrypt(creds.appSecret),
         app_name: creds.appName || null,
         redirect_uri: creds.redirectUri,
         updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id" });
+    }, { onConflict: "org_id" });
     if (error) throw new Error(error.message);
 }
 
-export async function loadMetaCredentials(userId: string): Promise<MetaCredentials | null> {
+export async function loadMetaCredentials(orgId: string): Promise<MetaCredentials | null> {
     const svc = createServiceClient();
     const { data, error } = await svc.from("meta_credentials")
         .select("app_id, app_secret_encrypted, app_name, redirect_uri")
-        .eq("user_id", userId).maybeSingle();
+        .eq("org_id", orgId).maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
     return {
@@ -55,7 +53,12 @@ export async function loadMetaCredentials(userId: string): Promise<MetaCredentia
     };
 }
 
-export async function saveMetaToken(userId: string, token: {
+export async function deleteMetaCredentials(orgId: string) {
+    const svc = createServiceClient();
+    await svc.from("meta_credentials").delete().eq("org_id", orgId);
+}
+
+export async function saveMetaToken(orgId: string, token: {
     accessToken: string;
     fbUserId?: string;
     fbUserName?: string;
@@ -67,22 +70,22 @@ export async function saveMetaToken(userId: string, token: {
         ? new Date(Date.now() + token.expiresInSeconds * 1000).toISOString()
         : null;
     const { error } = await svc.from("meta_tokens").upsert({
-        user_id: userId,
+        org_id: orgId,
         access_token_encrypted: encrypt(token.accessToken),
         fb_user_id: token.fbUserId || null,
         fb_user_name: token.fbUserName || null,
         scopes: token.scopes || null,
         expires_at: expiresAt,
         refreshed_at: new Date().toISOString(),
-    }, { onConflict: "user_id" });
+    }, { onConflict: "org_id" });
     if (error) throw new Error(error.message);
 }
 
-export async function loadMetaToken(userId: string): Promise<MetaTokenRow | null> {
+export async function loadMetaToken(orgId: string): Promise<MetaTokenRow | null> {
     const svc = createServiceClient();
     const { data, error } = await svc.from("meta_tokens")
         .select("access_token_encrypted, fb_user_id, fb_user_name, scopes, expires_at, refreshed_at")
-        .eq("user_id", userId).maybeSingle();
+        .eq("org_id", orgId).maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
     return {
@@ -95,7 +98,7 @@ export async function loadMetaToken(userId: string): Promise<MetaTokenRow | null
     };
 }
 
-export async function deleteMetaToken(userId: string) {
+export async function deleteMetaToken(orgId: string) {
     const svc = createServiceClient();
-    await svc.from("meta_tokens").delete().eq("user_id", userId);
+    await svc.from("meta_tokens").delete().eq("org_id", orgId);
 }

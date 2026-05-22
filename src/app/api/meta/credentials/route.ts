@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentUserId, saveMetaCredentials, loadMetaCredentials } from "@/lib/meta/store";
+import { saveMetaCredentials, loadMetaCredentials } from "@/lib/meta/store";
 import { buildRedirectUri } from "@/lib/meta/oauth";
+import { requireAgency, errorResponse } from "@/lib/org";
 
 export const dynamic = "force-dynamic";
 
@@ -12,34 +13,36 @@ const Body = z.object({
 });
 
 export async function POST(req: Request) {
-    const userId = await getCurrentUserId();
-    if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-
-    let parsed;
-    try { parsed = Body.parse(await req.json()); }
-    catch (e: any) { return NextResponse.json({ error: e.errors?.[0]?.message || "Dados invalidos" }, { status: 400 }); }
-
-    const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
-    const redirectUri = buildRedirectUri(origin);
-
     try {
-        await saveMetaCredentials(userId, { ...parsed, redirectUri });
+        const sess = await requireAgency();
+        let parsed;
+        try { parsed = Body.parse(await req.json()); }
+        catch (e: any) { return NextResponse.json({ error: e.errors?.[0]?.message || "Dados invalidos" }, { status: 400 }); }
+
+        const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+        const redirectUri = buildRedirectUri(origin);
+
+        await saveMetaCredentials(sess.orgId, { ...parsed, redirectUri });
         return NextResponse.json({ ok: true, redirectUri });
-    } catch (e: any) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+    } catch (e) {
+        const { status, body } = errorResponse(e);
+        return NextResponse.json(body, { status });
     }
 }
 
 export async function GET() {
-    const userId = await getCurrentUserId();
-    if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-    const creds = await loadMetaCredentials(userId);
-    if (!creds) return NextResponse.json({ configured: false });
-    // nunca retorna o secret — só info pública
-    return NextResponse.json({
-        configured: true,
-        appId: creds.app_id,
-        appName: creds.app_name,
-        redirectUri: creds.redirect_uri,
-    });
+    try {
+        const sess = await requireAgency();
+        const creds = await loadMetaCredentials(sess.orgId);
+        if (!creds) return NextResponse.json({ configured: false });
+        return NextResponse.json({
+            configured: true,
+            appId: creds.app_id,
+            appName: creds.app_name,
+            redirectUri: creds.redirect_uri,
+        });
+    } catch (e) {
+        const { status, body } = errorResponse(e);
+        return NextResponse.json(body, { status });
+    }
 }

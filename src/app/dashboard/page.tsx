@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
-    BarChart3, Loader2, AlertCircle, RefreshCw, LogOut, Link2, Building2,
-    CircleCheck, ExternalLink, Unlink,
+    BarChart3, Loader2, AlertCircle, RefreshCw, LogOut, Link2, Users,
+    CircleCheck, ExternalLink, Unlink, Settings, ChevronRight, Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -16,22 +17,24 @@ interface StatusResp {
     expiresAt?: string;
     error?: string | null;
 }
-interface MetaAccount {
-    id: string;
-    name: string;
-    account_id: string;
-    currency: string;
-    account_status: number;
-    amount_spent: string;
-    business_name?: string;
+
+interface OrgResp {
+    org?: { id: string; name: string; plan: string; max_clients: number; max_ad_accounts: number };
+    role?: "owner" | "manager";
+}
+
+interface ClientRow {
+    id: string; name: string; company: string | null; status: string;
+    portal_enabled: boolean; ad_accounts_count: number;
 }
 
 export default function Dashboard() {
     const router = useRouter();
     const supabase = createClient();
     const [user, setUser] = useState<{ email?: string; name?: string } | null>(null);
+    const [org, setOrg] = useState<OrgResp["org"]>();
     const [status, setStatus] = useState<StatusResp | null>(null);
-    const [accounts, setAccounts] = useState<MetaAccount[] | null>(null);
+    const [clients, setClients] = useState<ClientRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState("");
 
@@ -39,21 +42,18 @@ export default function Dashboard() {
         setLoading(true); setErr("");
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            setUser({ email: user?.email, name: (user?.user_metadata as any)?.full_name || (user?.user_metadata as any)?.name });
+            setUser({ email: user?.email, name: (user?.user_metadata as any)?.full_name });
 
-            const sRes = await fetch("/api/meta/status");
-            const s: StatusResp = await sRes.json();
-            setStatus(s);
-
-            if (s.stage === "connected") {
-                const aRes = await fetch("/api/accounts");
-                const j = await aRes.json();
-                if (j.success) setAccounts(j.accounts);
-                else setErr(j.error || "Falha ao carregar contas");
-            }
-        } catch (e: any) {
-            setErr(e.message);
-        } finally { setLoading(false); }
+            const [oRes, sRes, cRes] = await Promise.all([
+                fetch("/api/org").then(r => r.json()),
+                fetch("/api/meta/status").then(r => r.json()),
+                fetch("/api/clients").then(r => r.json()),
+            ]);
+            setOrg(oRes.org);
+            setStatus(sRes);
+            setClients(cRes.clients || []);
+        } catch (e: any) { setErr(e.message); }
+        finally { setLoading(false); }
     };
 
     useEffect(() => { load(); /* eslint-disable-line */ }, []);
@@ -61,7 +61,7 @@ export default function Dashboard() {
     const logout = async () => { await supabase.auth.signOut(); router.push("/login"); };
 
     const disconnect = async () => {
-        if (!confirm("Desconectar sua conta Meta? Você precisará autorizar de novo.")) return;
+        if (!confirm("Desconectar conta Meta? Você precisará autorizar de novo.")) return;
         await fetch("/api/meta/disconnect", { method: "POST" });
         toast.success("Desconectado");
         load();
@@ -75,88 +75,91 @@ export default function Dashboard() {
                         <BarChart3 className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                        <h1 className="font-bold">Newgestor</h1>
-                        <p className="text-xs muted">{user?.email}</p>
+                        <h1 className="font-bold">{org?.name || "Newgestor"}</h1>
+                        <p className="text-xs muted">{user?.email} · plano <strong>{org?.plan || "—"}</strong></p>
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <nav className="flex gap-2">
+                    <Link href="/dashboard/clients" className="btn-secondary"><Users className="w-4 h-4" /> Clientes</Link>
+                    <Link href="/dashboard/settings" className="btn-secondary"><Settings className="w-4 h-4" /> Config</Link>
                     <button onClick={load} className="btn-secondary" disabled={loading}>
                         <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
                     </button>
-                    <button onClick={logout} className="btn-secondary">
-                        <LogOut className="w-4 h-4" /> Sair
-                    </button>
-                </div>
+                    <button onClick={logout} className="btn-secondary"><LogOut className="w-4 h-4" /></button>
+                </nav>
             </header>
 
             <main className="max-w-6xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
-                {/* Status da conexão Meta */}
                 <ConnectionStatus status={status} loading={loading} onDisconnect={disconnect} />
 
-                {/* Contas */}
+                {/* Grid: clientes + stats */}
                 {status?.stage === "connected" && (
-                    <section className="glass">
-                        <div className="p-4 md:p-5 border-b flex items-center justify-between" style={{ borderColor: "var(--color-glass-border)" }}>
-                            <div>
-                                <h2 className="font-bold flex items-center gap-2">
-                                    <Building2 className="w-4 h-4" /> Contas de anúncio
-                                </h2>
-                                <p className="text-xs muted mt-1">
-                                    {accounts ? `${accounts.length} contas acessíveis` : "Carregando..."}
-                                </p>
-                            </div>
+                    <>
+                        <div className="grid md:grid-cols-3 gap-4">
+                            <StatCard label="Clientes" value={clients.length} cap={org?.max_clients} icon={Users} />
+                            <StatCard label="Contas atribuídas" value={clients.reduce((a, c) => a + c.ad_accounts_count, 0)} cap={org?.max_ad_accounts} icon={Building2} />
+                            <StatCard label="Plano" value={org?.plan || "—"} icon={Settings} />
                         </div>
 
-                        {loading && !accounts && (
-                            <div className="flex justify-center py-10">
-                                <Loader2 className="w-6 h-6 animate-spin muted" />
+                        <section className="glass">
+                            <div className="p-4 md:p-5 border-b flex items-center justify-between" style={{ borderColor: "var(--color-glass-border)" }}>
+                                <div>
+                                    <h2 className="font-bold flex items-center gap-2"><Users className="w-4 h-4" /> Meus clientes</h2>
+                                    <p className="text-xs muted mt-1">{clients.length} cadastrados</p>
+                                </div>
+                                <Link href="/dashboard/clients" className="btn-primary text-xs">Gerenciar →</Link>
                             </div>
-                        )}
-
-                        {err && (
-                            <div className="p-4 flex items-center gap-2 text-sm" style={{ color: "#fca5a5" }}>
-                                <AlertCircle className="w-4 h-4" /> {err}
-                            </div>
-                        )}
-
-                        {accounts && accounts.length === 0 && (
-                            <div className="p-8 text-center muted text-sm">
-                                Nenhuma conta de anúncio encontrada pra esse token.
-                            </div>
-                        )}
-
-                        {accounts && accounts.length > 0 && (
-                            <ul className="divide-y" style={{ borderColor: "var(--color-glass-border)" }}>
-                                {accounts.map(a => (
-                                    <li key={a.id} className="p-4 flex items-center justify-between hover:bg-white/5">
-                                        <div>
-                                            <p className="font-semibold text-sm">{a.name}</p>
-                                            <p className="text-xs muted">
-                                                {a.account_id} · {a.currency} · gasto vida: {(Number(a.amount_spent) / 100).toLocaleString("pt-BR", { style: "currency", currency: a.currency || "BRL" })}
-                                            </p>
-                                        </div>
-                                        <span className={`text-xs px-2 py-1 rounded-full`}
-                                            style={{ background: a.account_status === 1 ? "rgba(52,211,153,0.15)" : "rgba(251,191,36,0.15)", color: a.account_status === 1 ? "#34d399" : "#fbbf24" }}>
-                                            {a.account_status === 1 ? "Ativa" : `Status ${a.account_status}`}
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </section>
+                            {clients.length === 0 ? (
+                                <div className="p-8 text-center">
+                                    <p className="muted text-sm mb-3">Nenhum cliente ainda. Adicione o primeiro pra começar.</p>
+                                    <Link href="/dashboard/clients" className="btn-primary inline-flex">Adicionar cliente</Link>
+                                </div>
+                            ) : (
+                                <ul className="divide-y" style={{ borderColor: "var(--color-glass-border)" }}>
+                                    {clients.slice(0, 5).map(c => (
+                                        <li key={c.id}>
+                                            <Link href={`/dashboard/clients/${c.id}`} className="flex items-center justify-between p-4 hover:bg-white/5">
+                                                <div>
+                                                    <p className="font-semibold text-sm">{c.name}</p>
+                                                    <p className="text-xs muted">{c.company || "Sem empresa"} · {c.ad_accounts_count} contas atribuídas · {c.portal_enabled ? "portal ativo" : "sem portal"}</p>
+                                                </div>
+                                                <ChevronRight className="w-4 h-4 muted" />
+                                            </Link>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </section>
+                    </>
                 )}
 
-                <p className="text-center text-xs muted mt-10">
-                    Dashboard completo (KPIs, breakdowns, export, anúncios ativos) em construção. Por enquanto, lista de contas.
-                </p>
+                {err && (
+                    <div className="glass p-4 flex items-center gap-2 text-sm" style={{ color: "#fca5a5" }}>
+                        <AlertCircle className="w-4 h-4" /> {err}
+                    </div>
+                )}
             </main>
+        </div>
+    );
+}
+
+function StatCard({ label, value, cap, icon: Icon }: { label: string; value: number | string; cap?: number; icon: any }) {
+    return (
+        <div className="glass p-4">
+            <div className="flex items-start justify-between">
+                <div>
+                    <p className="text-xs muted uppercase tracking-wide">{label}</p>
+                    <p className="text-2xl font-bold mt-1">{value}{typeof cap === "number" && <span className="text-sm muted font-normal"> / {cap}</span>}</p>
+                </div>
+                <Icon className="w-5 h-5" style={{ color: "#a78bfa" }} />
+            </div>
         </div>
     );
 }
 
 function ConnectionStatus({ status, loading, onDisconnect }: { status: StatusResp | null; loading: boolean; onDisconnect: () => void }) {
     if (loading && !status) {
-        return <div className="glass p-5 flex items-center gap-3"><Loader2 className="w-4 h-4 animate-spin muted" /> <span className="muted text-sm">Carregando status...</span></div>;
+        return <div className="glass p-5 flex items-center gap-3"><Loader2 className="w-4 h-4 animate-spin muted" /> <span className="muted text-sm">Carregando...</span></div>;
     }
     if (!status) return null;
 
@@ -164,9 +167,9 @@ function ConnectionStatus({ status, loading, onDisconnect }: { status: StatusRes
         return (
             <div className="glass p-6 text-center">
                 <Link2 className="w-8 h-8 mx-auto mb-3" style={{ color: "#a78bfa" }} />
-                <h2 className="font-bold mb-1">Você ainda não conectou sua conta Meta</h2>
-                <p className="muted text-sm mb-4">Setup guiado em 4 passos, leva ~3 minutos.</p>
-                <a href="/onboarding" className="btn-primary inline-flex">Começar onboarding <ExternalLink className="w-3 h-3" /></a>
+                <h2 className="font-bold mb-1">Configure seu Meta App pra começar</h2>
+                <p className="muted text-sm mb-4">Cadastre App ID e App Secret do seu próprio app Meta. Setup guiado.</p>
+                <a href="/onboarding" className="btn-primary inline-flex">Configurar Meta App <ExternalLink className="w-3 h-3" /></a>
             </div>
         );
     }
@@ -174,7 +177,7 @@ function ConnectionStatus({ status, loading, onDisconnect }: { status: StatusRes
         return (
             <div className="glass p-6">
                 <h2 className="font-bold mb-1">Credenciais salvas — falta autorizar</h2>
-                <p className="muted text-sm mb-4">App ID configurado: <strong>{status.appId}</strong>. Clique pra terminar a conexão com Facebook.</p>
+                <p className="muted text-sm mb-4">App ID: <strong>{status.appId}</strong>. Conclua a conexão com Facebook.</p>
                 <a href="/api/meta/connect" className="btn-primary inline-flex">Conectar com Facebook</a>
             </div>
         );
@@ -200,20 +203,18 @@ function ConnectionStatus({ status, loading, onDisconnect }: { status: StatusRes
                 <div className="flex items-start gap-3">
                     <CircleCheck className="w-6 h-6" style={{ color: "#34d399" }} />
                     <div>
-                        <h2 className="font-bold">Conectado com Meta</h2>
+                        <h2 className="font-bold">Meta conectado</h2>
                         <p className="text-sm muted-strong">{status.fbUserName} · App: {status.appName || status.appId}</p>
                         {expires && (
                             <p className="text-xs mt-1" style={{ color: tone === "ok" ? "rgba(255,255,255,0.5)" : tone === "warn" ? "#fbbf24" : "#fca5a5" }}>
-                                Token válido por mais {days} dias (até {expires.toLocaleDateString("pt-BR")})
+                                Token válido por {days} dias (até {expires.toLocaleDateString("pt-BR")})
                             </p>
                         )}
                     </div>
                 </div>
                 <div className="flex gap-2">
                     <a href="/api/meta/connect" className="btn-secondary text-xs">Renovar token</a>
-                    <button onClick={onDisconnect} className="btn-secondary text-xs">
-                        <Unlink className="w-3 h-3" /> Desconectar
-                    </button>
+                    <button onClick={onDisconnect} className="btn-secondary text-xs"><Unlink className="w-3 h-3" /> Desconectar</button>
                 </div>
             </div>
         </div>

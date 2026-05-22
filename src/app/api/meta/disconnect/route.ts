@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
-import { getCurrentUserId, deleteMetaToken } from "@/lib/meta/store";
+import { deleteMetaToken } from "@/lib/meta/store";
+import { requireAgency, errorResponse } from "@/lib/org";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-    const userId = await getCurrentUserId();
-    if (!userId) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
-    await deleteMetaToken(userId);
-    return NextResponse.json({ ok: true });
+    try {
+        const sess = await requireAgency();
+        await deleteMetaToken(sess.orgId);
+        return NextResponse.json({ ok: true });
+    } catch (e) {
+        const { status, body } = errorResponse(e);
+        return NextResponse.json(body, { status });
+    }
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, ShieldCheck, Zap } from "lucide-react";
+import { BarChart3, ShieldCheck, Zap, Users } from "lucide-react";
 
 export default function Home() {
   return (
@@ -31,10 +31,11 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="como-funciona" className="grid md:grid-cols-3 gap-4">
-        <Feature icon={Zap} title="Setup em 3 minutos" body="Login com Google, conecta sua conta Meta e pronto. Sem planilha, sem token expirando toda hora." />
-        <Feature icon={ShieldCheck} title="Suas chaves, seu acesso" body="Cada gestor cadastra seu próprio Meta App. Tokens criptografados (AES-256). Você sempre tem o controle." />
-        <Feature icon={BarChart3} title="Todas as métricas" body="60+ métricas, comparativo de períodos, breakdowns, lista compartilhável de anúncios ativos, export CSV/JSON pra IA." />
+      <section id="como-funciona" className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Feature icon={Zap} title="Setup em 5 minutos" body="Crie sua agência, cole App ID/Secret do seu Meta App próprio, autorize o Facebook. Pronto." />
+        <Feature icon={ShieldCheck} title="Suas chaves, seu acesso" body="Cada agência cadastra seu próprio Meta App dentro da plataforma. Tokens criptografados AES-256, isolados por RLS." />
+        <Feature icon={Users} title="Portal do cliente" body="Cada cliente recebe um link de convite e acessa um portal somente-leitura com as contas que você liberou — permissões granulares." />
+        <Feature icon={BarChart3} title="Todas as métricas" body="KPIs Meta em tempo real, campanhas, criativos ativos. Dados puxados direto da Graph API." />
       </section>
     </main>
   );
