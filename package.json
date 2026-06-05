@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "pnpm --filter web dev",
-    "dev:api": "pnpm --filter api start:dev",
+    "dev": "pnpm --filter frontend dev",
+    "dev:backend": "pnpm --filter backend start:dev",
     "dev:all": "pnpm -r --parallel --filter=./apps/* run dev",
-    "build": "pnpm --filter web build",
-    "build:api": "pnpm --filter api build",
-    "lint": "pnpm --filter web lint"
+    "build": "pnpm --filter frontend build",
+    "build:backend": "pnpm --filter backend build",
+    "lint": "pnpm --filter frontend lint"
   },
   "packageManager": "pnpm@11.0.0"
 }
