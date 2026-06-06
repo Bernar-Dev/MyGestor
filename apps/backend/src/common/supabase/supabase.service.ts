@@ -49,6 +49,9 @@ export class SupabaseService implements OnModuleInit {
   /** Valida o JWT contra o Supabase Auth. Retorna o user, ou null se inválido/expirado. */
   async getUserFromToken(jwt: string): Promise<User | null> {
     const { data, error } = await this._service.auth.getUser(jwt);
+    if (error) {
+      console.error('[supabase] getUser error:', error.message, '| status:', (error as any).status);
+    }
     if (error || !data.user) return null;
     return data.user;
   }
