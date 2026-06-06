@@ -15,8 +15,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const res = host.switchToHttp().getResponse<Response>();
 
-    if (exception instanceof HttpError) {
-      return res.status(exception.status).json({ error: exception.message });
+    // Check by duck-typing too — instanceof can fail across module boundaries in serverless bundles
+    const isHttpError =
+      exception instanceof HttpError ||
+      (exception instanceof Error &&
+        (exception as unknown as { name?: string }).name === 'HttpError' &&
+        typeof (exception as unknown as { status?: number }).status === 'number');
+
+    if (isHttpError) {
+      const e = exception as HttpError;
+      return res.status(e.status).json({ error: e.message });
     }
 
     if (exception instanceof HttpException) {

@@ -18,6 +18,16 @@ export class SupabaseService implements OnModuleInit {
       );
     }
 
+    // Decode JWT payload to validate key role at startup (no secret needed)
+    try {
+      const payload = JSON.parse(
+        Buffer.from(serviceKey.split('.')[1], 'base64').toString(),
+      );
+      console.log('[supabase] key role:', payload.role, '| url project:', this.url.split('.')[0].split('//')[1]);
+    } catch {
+      console.warn('[supabase] could not decode service key payload');
+    }
+
     this._service = createClient(this.url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
