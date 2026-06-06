@@ -33,21 +33,15 @@ export class SupabaseAuthGuard implements CanActivate {
 
     if (token) {
       const user = await this.supabase.getUserFromToken(token);
-      console.log('[guard] token present, user:', user ? user.id : 'null (auth failed)');
       if (user) {
         req.token = token;
         req.user = { id: user.id, email: user.email ?? '' };
         req.session = await this.org.resolveSession(user.id, user.email ?? '');
       }
-    } else {
-      console.warn('[guard] no Bearer token in Authorization header');
     }
 
     if (isPublic) return true;
-    if (!req.user) {
-      console.warn('[guard] throwing 401 — req.user is not set');
-      throw new HttpError(401, 'Não autenticado');
-    }
+    if (!req.user) throw new HttpError(401, 'Não autenticado');
     return true;
   }
 }

@@ -141,7 +141,6 @@ export class OrgService {
       .select('id, slug')
       .single();
     if (error || !org) {
-      console.error('[createOrg] INSERT organizations failed:', JSON.stringify(error));
       throw new HttpError(500, error?.message || 'Falha ao criar organização');
     }
 
@@ -150,19 +149,13 @@ export class OrgService {
       user_id: opts.userId,
       role: 'owner',
     });
-    if (memErr) {
-      console.error('[createOrg] INSERT organization_members failed:', JSON.stringify(memErr));
-      throw new HttpError(500, memErr.message);
-    }
+    if (memErr) throw new HttpError(500, memErr.message);
 
     const { error: profErr } = await svc
       .from('profiles')
       .update({ current_org_id: org.id, role: 'agency' })
       .eq('id', opts.userId);
-    if (profErr) {
-      console.error('[createOrg] UPDATE profiles failed:', JSON.stringify(profErr));
-      throw new HttpError(500, profErr.message);
-    }
+    if (profErr) throw new HttpError(500, profErr.message);
 
     return { id: org.id, slug: org.slug };
   }

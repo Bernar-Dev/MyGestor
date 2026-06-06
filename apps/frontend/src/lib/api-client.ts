@@ -22,7 +22,6 @@ async function authHeader(): Promise<Record<string, string>> {
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    console.log("[apiFetch] session:", session ? `token=${session.access_token?.slice(0,20)}...` : "null");
     return session?.access_token
       ? { Authorization: `Bearer ${session.access_token}` }
       : {};

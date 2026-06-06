@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Portal — Mockup</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: linear-gradient(180deg, #0a0c1c 0%, #0f1225 100%);
+    color: #e2e8f0;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .glass {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 1rem;
+    backdrop-filter: blur(20px);
+  }
+  .muted { color: rgba(255,255,255,0.55); }
+  .btn-secondary {
+    display: inline-flex; align-items: center; gap: .5rem;
+    padding: .55rem 1rem; border-radius: .65rem; font-weight: 600;
+    font-size: .85rem; color: #e2e8f0;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1); cursor: pointer;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .header-left { display: flex; align-items: center; gap: .75rem; }
+  .agency-logo {
+    width: 36px; height: 36px; border-radius: .5rem;
+    background: linear-gradient(135deg, #4c6ef5, #7c3aed);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+  }
+  select.input {
+    padding: .5rem .75rem; background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: .6rem;
+    color: white; font-size: .85rem; outline: none; cursor: pointer;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
+
+  /* KPI grid */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; }
+  .kpi { padding: 1rem; }
+  .kpi-label { font-size: .7rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: .06em; display: flex; justify-content: space-between; align-items: center; }
+  .kpi-value { font-size: 1.5rem; font-weight: 700; margin-top: .35rem; }
+  .kpi-icon { color: #a78bfa; font-size: .9rem; }
+
+  /* Campaigns */
+  .section-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    font-weight: 700;
+  }
+  .campaign-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .75rem 1.25rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .campaign-row:last-child { border-bottom: none; }
+  .campaign-name { font-size: .875rem; font-weight: 600; }
+  .campaign-obj { font-size: .75rem; color: rgba(255,255,255,0.45); margin-top: .1rem; }
+  .badge-active {
+    font-size: .7rem; padding: .2rem .6rem; border-radius: 999px;
+    background: rgba(52,211,153,0.15); color: #34d399; font-weight: 600;
+  }
+  .badge-paused {
+    font-size: .7rem; padding: .2rem .6rem; border-radius: 999px;
+    background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.45); font-weight: 600;
+  }
+
+  /* Ads grid */
+  .ads-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; margin-top: .75rem; }
+  .ad-card { border-radius: .65rem; overflow: hidden; padding: .5rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
+  .ad-thumb {
+    width: 100%; aspect-ratio: 1; border-radius: .5rem; overflow: hidden;
+    background: linear-gradient(135deg, #1e1b4b, #312e81);
+    display: flex; align-items: center; justify-content: center;
+    font-size: .65rem; color: rgba(255,255,255,0.3);
+  }
+  .ad-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .ad-name { font-size: .7rem; margin-top: .4rem; color: rgba(255,255,255,0.8); line-height: 1.3; }
+
+  /* Portal home */
+  .portal-header { padding: 1.25rem; }
+  .account-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    cursor: pointer; transition: background .15s;
+  }
+  .account-row:hover { background: rgba(255,255,255,0.03); }
+  .account-row:last-child { border-bottom: none; }
+
+  /* tabs */
+  .tabs { display: flex; gap: .5rem; margin-bottom: 1.5rem; }
+  .tab {
+    padding: .5rem 1.2rem; border-radius: .65rem; font-size: .85rem; font-weight: 600;
+    cursor: pointer; border: none;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.6);
+  }
+  .tab.active {
+    background: linear-gradient(135deg, #4c6ef5, #7c3aed);
+    border-color: transparent; color: white;
+  }
+
+  /* welcome section */
+  .welcome { padding: 1.25rem; }
+  .welcome h2 { font-weight: 700; font-size: 1rem; margin-bottom: .25rem; }
+  .welcome p { font-size: .85rem; color: rgba(255,255,255,0.5); line-height: 1.5; }
+
+  /* divider label */
+  .page-label {
+    font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: rgba(255,255,255,0.3); margin-bottom: .25rem;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     TELA 1 — PORTAL HOME (o que o cliente vê)
+     ═══════════════════════════════════════════ -->
+<div style="max-width:960px;margin:0 auto;padding:2rem 1.5rem 0;">
+  <p class="page-label">📱 Tela 1 — Portal do cliente (/portal)</p>
+</div>
+
+<header>
+  <div class="header-left">
+    <div class="agency-logo">📊</div>
+    <div>
+      <div style="font-weight:700;font-size:.95rem;">Starchest Agency</div>
+      <div style="font-size:.75rem;color:rgba(255,255,255,0.45);">Portal · João Silva</div>
+    </div>
+  </div>
+  <button class="btn-secondary">⬅ Sair</button>
+</header>
+
+<main>
+  <div class="glass welcome">
+    <h2>Bem-vindo, João 👋</h2>
+    <p>Aqui você acompanha suas campanhas Meta em tempo real. Os dados são puxados direto da Meta — sem planilhas, sem demora.</p>
+  </div>
+
+  <div class="glass">
+    <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div>🏢 Suas contas de anúncio</div>
+        <div style="font-size:.75rem;font-weight:400;color:rgba(255,255,255,0.45);margin-top:.2rem;">2 contas liberadas</div>
+      </div>
+    </div>
+    <div class="account-row">
+      <div>
+        <div class="campaign-name">Loja Online João Silva</div>
+        <div class="campaign-obj">act_1234567890 · BRL</div>
+      </div>
+      <span style="color:rgba(255,255,255,0.35);font-size:.8rem;">↗</span>
+    </div>
+    <div class="account-row">
+      <div>
+        <div class="campaign-name">João Silva — Produto 2</div>
+        <div class="campaign-obj">act_9876543210 · BRL</div>
+      </div>
+      <span style="color:rgba(255,255,255,0.35);font-size:.8rem;">↗</span>
+    </div>
+  </div>
+</main>
+
+<!-- ═══════════════════════════════════════════
+     TELA 2 — CONTA ESPECÍFICA COM MÉTRICAS
+     ═══════════════════════════════════════════ -->
+<div style="max-width:960px;margin:3rem auto 0;padding:0 1.5rem;">
+  <p class="page-label">📊 Tela 2 — Métricas da conta (/portal/accounts/act_1234567890)</p>
+</div>
+
+<header style="margin-top:.5rem;">
+  <div class="header-left">
+    <button class="btn-secondary">← Voltar</button>
+    <div>
+      <div style="font-weight:700;">Loja Online João Silva</div>
+      <div style="font-size:.75rem;color:rgba(255,255,255,0.45);">Métricas e campanhas</div>
+    </div>
+  </div>
+  <select class="input">
+    <option>Hoje</option>
+    <option>Ontem</option>
+    <option>7 dias</option>
+    <option selected>30 dias</option>
+    <option>Este mês</option>
+    <option>Mês passado</option>
+  </select>
+</header>
+
+<main>
+  <!-- KPIs -->
+  <div class="kpi-grid">
+    <div class="glass kpi">
+      <div class="kpi-label">Gasto <span class="kpi-icon">💰</span></div>
+      <div class="kpi-value">R$ 4.820,50</div>
+    </div>
+    <div class="glass kpi">
+      <div class="kpi-label">Impressões <span class="kpi-icon">👁</span></div>
+      <div class="kpi-value">312.847</div>
+    </div>
+    <div class="glass kpi">
+      <div class="kpi-label">Cliques <span class="kpi-icon">🖱</span></div>
+      <div class="kpi-value">8.934</div>
+    </div>
+    <div class="glass kpi">
+      <div class="kpi-label">CTR <span class="kpi-icon">📈</span></div>
+      <div class="kpi-value">2,85%</div>
+    </div>
+    <div class="glass kpi">
+      <div class="kpi-label">CPC</div>
+      <div class="kpi-value">R$ 0,54</div>
+    </div>
+    <div class="glass kpi">
+      <div class="kpi-label">CPM</div>
+      <div class="kpi-value">R$ 15,40</div>
+    </div>
+    <div class="glass kpi">
+      <div class="kpi-label">Alcance</div>
+      <div class="kpi-value">198.203</div>
+    </div>
+    <div class="glass kpi">
+      <div class="kpi-label">Frequência</div>
+      <div class="kpi-value">1,58</div>
+    </div>
+  </div>
+
+  <!-- Campanhas -->
+  <div class="glass">
+    <div class="section-header">Campanhas (4)</div>
+    <div class="campaign-row">
+      <div>
+        <div class="campaign-name">Conversões — Produto Principal</div>
+        <div class="campaign-obj">CONVERSIONS</div>
+      </div>
+      <span class="badge-active">ACTIVE</span>
+    </div>
+    <div class="campaign-row">
+      <div>
+        <div class="campaign-name">Tráfego — Blog e Conteúdo</div>
+        <div class="campaign-obj">LINK_CLICKS</div>
+      </div>
+      <span class="badge-active">ACTIVE</span>
+    </div>
+    <div class="campaign-row">
+      <div>
+        <div class="campaign-name">Remarketing — Abandonou carrinho</div>
+        <div class="campaign-obj">CONVERSIONS</div>
+      </div>
+      <span class="badge-active">ACTIVE</span>
+    </div>
+    <div class="campaign-row">
+      <div>
+        <div class="campaign-name">Awareness — Feriado (pausada)</div>
+        <div class="campaign-obj">BRAND_AWARENESS</div>
+      </div>
+      <span class="badge-paused">PAUSED</span>
+    </div>
+  </div>
+
+  <!-- Anúncios -->
+  <div class="glass" style="padding:1.25rem;">
+    <div style="font-weight:700;margin-bottom:.75rem;">Anúncios ativos (6)</div>
+    <div class="ads-grid">
+      <div class="ad-card">
+        <div class="ad-thumb" style="background:linear-gradient(135deg,#1e3a5f,#2563eb);">
+          <span>imagem</span>
+        </div>
+        <div class="ad-name">Oferta Verão — 30% off produto A</div>
+      </div>
+      <div class="ad-card">
+        <div class="ad-thumb" style="background:linear-gradient(135deg,#3b0764,#7c3aed);">
+          <span>imagem</span>
+        </div>
+        <div class="ad-name">Remarketing carrinho abandonado</div>
+      </div>
+      <div class="ad-card">
+        <div class="ad-thumb" style="background:linear-gradient(135deg,#064e3b,#059669);">
+          <span>imagem</span>
+        </div>
+        <div class="ad-name">Novo produto — Lançamento maio</div>
+      </div>
+      <div class="ad-card">
+        <div class="ad-thumb" style="background:linear-gradient(135deg,#7c2d12,#ea580c);">
+          <span>imagem</span>
+        </div>
+        <div class="ad-name">Depoimento cliente — prova social</div>
+      </div>
+      <div class="ad-card">
+        <div class="ad-thumb" style="background:linear-gradient(135deg,#1e1b4b,#4338ca);">
+          <span>imagem</span>
+        </div>
+        <div class="ad-name">Story — Flash sale fim de semana</div>
+      </div>
+      <div class="ad-card">
+        <div class="ad-thumb" style="background:linear-gradient(135deg,#831843,#db2777);">
+          <span>imagem</span>
+        </div>
+        <div class="ad-name">Video — Unboxing produto principal</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div style="height:3rem;"></div>
+</body>
+</html>
