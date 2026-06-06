@@ -68,6 +68,19 @@ export class InvitesController {
       );
     }
 
+    // Bloqueia se o usuário já é dono de uma agência
+    const { data: profile } = await svc
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (profile?.role === 'agency') {
+      throw new HttpError(
+        409,
+        'Sua conta já é uma conta de agência e não pode aceitar convites de cliente.',
+      );
+    }
+
     const { error: cErr } = await svc
       .from('clients')
       .update({
