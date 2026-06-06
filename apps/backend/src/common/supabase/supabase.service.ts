@@ -3,7 +3,8 @@ import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 
 @Injectable()
 export class SupabaseService implements OnModuleInit {
-  private _service!: SupabaseClient;
+  private _service!: SupabaseClient;  // DB operations (service_role, never touched by auth.getUser)
+  private _auth!: SupabaseClient;     // Auth validation only (isolated from _service)
   private url!: string;
   private anonKey!: string;
 
@@ -28,7 +29,14 @@ export class SupabaseService implements OnModuleInit {
       console.warn('[supabase] could not decode service key payload');
     }
 
+    // DB client — ONLY used for database operations. Never call auth methods on this.
     this._service = createClient(this.url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    // Auth client — ONLY used for getUserFromToken(). Isolated so auth.getUser() cannot
+    // pollute the DB client's internal JWT state (session sharing between auth ↔ postgrest).
+    this._auth = createClient(this.url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
   }
@@ -48,7 +56,8 @@ export class SupabaseService implements OnModuleInit {
 
   /** Valida o JWT contra o Supabase Auth. Retorna o user, ou null se inválido/expirado. */
   async getUserFromToken(jwt: string): Promise<User | null> {
-    const { data, error } = await this._service.auth.getUser(jwt);
+    // Use _auth (isolated client) so auth.getUser() cannot pollute _service's JWT state
+    const { data, error } = await this._auth.auth.getUser(jwt);
     if (error) {
       console.error('[supabase] getUser error:', error.message, '| status:', (error as any).status);
     }
