@@ -29,15 +29,18 @@ apps/backend   (NestJS 11)   — all API logic, auth via Bearer token
 | Branch | `main` | `main` |
 | Entry | Next.js auto | `api/index.js` → `dist/app.module` |
 | Status | ✅ deployed | ✅ deployed |
+| URL | `https://meugestor-one.vercel.app` | backend Vercel URL |
 
 ### Vercel Env Vars — Frontend
 ```
-NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-SUPABASE_SERVICE_ROLE_KEY
-ENCRYPTION_KEY
-NEXT_PUBLIC_APP_URL
-NEXT_PUBLIC_API_URL          ← URL do backend Vercel
+NEXT_PUBLIC_SUPABASE_URL       = https://apvfxliqoabcndcdnjpi.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY  = <anon key>
+SUPABASE_SERVICE_ROLE_KEY      = <service role key>
+ENCRYPTION_KEY                 = <AES-256 key>
+NEXT_PUBLIC_APP_URL            = https://meugestor-one.vercel.app
+NEXT_PUBLIC_API_URL            = <backend Vercel URL>
+META_PLATFORM_APP_ID           = 1723020158823520  ← Consumer app (login)
+META_PLATFORM_APP_SECRET       = <consumer app secret>
 ```
 
 ### Vercel Env Vars — Backend
@@ -61,42 +64,61 @@ NODE_ENV=production
 | 3 | Auth Guard + SupabaseService + OrgService | ✅ done |
 | 4 | All modules migrated (org, clients, invites, portal, meta) | ✅ done |
 | 5 | Deploy to Vercel (frontend + backend) | ✅ done |
-| 6 | Facebook OAuth platform-level (replace per-agency Meta App) | 🔜 next |
-| 7 | Design System (shadcn/ui, AppShell) | ⏳ pending |
-| 8 | Shared types `packages/shared` | ⏳ pending |
+| 6 | Facebook OAuth platform-level (settings page) | ✅ done |
+| 6b | Facebook Login on login page (Supabase provider) | 🔜 in progress |
+| 7 | Google Login on login page | 🔜 in progress |
+| 8 | Design System (shadcn/ui, AppShell) | ⏳ pending |
+| 9 | Shared types `packages/shared` | ⏳ pending |
 
 ---
 
-## Phase 6 — Facebook OAuth Refactor (NEXT)
+## Phase 6 — Facebook OAuth (DONE)
 
-**Goal:** Replace per-agency Meta App setup with platform-level Facebook Login.
+### Fluxo 1 — "Conectar com Facebook" nas Configurações (Meta Ads)
+- Usa app Business: **meu-gestor** (App ID: `1764053491421830`)
+- Flow: `/api/meta/connect?platform=1` → Facebook OAuth → `/api/meta/callback`
+- Cookie `meta_oauth_platform=1` identifica modo plataforma no callback
+- Scopes: `ads_read, ads_management, business_management, read_insights`
+- Token salvo em `meta_tokens` via MetaStoreService
+- `META_PLATFORM_APP_ID` + `META_PLATFORM_APP_SECRET` nas env vars do **frontend**
 
-**Current flow (per-agency):**
-1. Each agency creates their own Meta Developer App
-2. Saves App ID + Secret in the system
-3. Does OAuth dance to get token
-4. Token stored encrypted in `meta_tokens`
+### Fluxo 2 — "Continuar com Facebook" na tela de login (Auth)
+- Usa app Consumer: **myGest** (App ID: `1723020158823520`)
+- Flow: Supabase `signInWithOAuth({ provider: 'facebook' })` → Supabase callback
+- Configurado em Supabase → Authentication → Providers → Facebook
+- ⚠️ **Problema conhecido**: Facebook não retorna email para contas criadas com telefone
+  - Solução: funciona para a maioria dos usuários com email verificado no Facebook
+  - Para contas sem email verificado via API → usar email/Google login
 
-**New flow (platform-level):**
-1. Developer creates ONE Meta App for the whole platform
-2. User clicks "Login com Facebook" (Supabase Facebook provider)
-3. Supabase handles OAuth with scopes: `ads_read`, `ads_management`, `business_management`, `read_insights`
-4. `provider_token` extracted from Supabase session → exchanged for long-lived token
-5. Token stored in `meta_tokens` — same table, same infrastructure
+### Meta Apps configurados
+| App | Tipo | Uso | App ID |
+|---|---|---|---|
+| meu-gestor | Business | Meta Ads API | `1764053491421830` |
+| myGest | Consumer | Login autenticação | `1723020158823520` |
 
-**What changes:**
-- Remove onboarding steps 2-4 (Meta App creation)
-- Remove `meta_credentials` table usage (no more per-agency App ID/Secret)
-- Configure Supabase Facebook Auth provider (one-time platform setup)
-- New `POST /api/meta/connect-facebook` endpoint to save provider_token
-- Remove `apps/frontend/src/app/api/meta/connect/route.ts`
-- Remove `apps/frontend/src/app/api/meta/callback/route.ts` (no longer needed)
-- `meta/callback` stays if keeping per-agency flow as fallback
+### Redirect URIs no app myGest (Consumer)
+```
+https://apvfxliqoabcndcdnjpi.supabase.co/auth/v1/callback
+```
 
-**What stays the same:**
-- `meta_tokens` table and MetaStoreService
-- MetaApiService (uses access_token regardless of source)
-- All portal/insights endpoints
+### Redirect URIs no app meu-gestor (Business)
+```
+https://apvfxliqoabcndcdnjpi.supabase.co/auth/v1/callback
+https://meugestor-one.vercel.app/api/meta/callback
+```
+
+---
+
+## Phase 7 — Google Login (IN PROGRESS)
+
+**O botão "Continuar com Google" já existe na tela de login.**
+
+Para ativar em produção:
+1. Google Cloud Console → projeto MyGestor → APIs & Services → Credentials
+2. Criar OAuth 2.0 Client ID (Web application)
+3. Authorized redirect URI: `https://apvfxliqoabcndcdnjpi.supabase.co/auth/v1/callback`
+4. Pegar Client ID e Secret
+5. Supabase → Authentication → Providers → Google → ativar + colocar credenciais
 
 ---
 
@@ -115,9 +137,9 @@ NODE_ENV=production
 - `GET /api/meta/status` → MetaModule
 - `POST /api/meta/disconnect` → MetaModule
 
-### 🔒 Staying in Next (`apps/frontend`) — until Phase 6
-- `GET /api/meta/connect` — browser redirect + CSRF cookie
-- `GET /api/meta/callback` — Meta OAuth callback (hardcoded URI)
+### 🔒 Staying in Next (`apps/frontend`)
+- `GET /api/meta/connect` — browser redirect + CSRF cookie (suporta ?platform=1)
+- `GET /api/meta/callback` — Meta OAuth callback
 
 ---
 
@@ -125,55 +147,68 @@ NODE_ENV=production
 
 ### Backend (`apps/backend/src/`)
 ```
-main.ts                              port 3001, CORS, prefix /api
+main.ts
 api/index.js                         Vercel serverless entry → dist/app.module
 app.module.ts
 common/
-  supabase/supabase.service.ts       service() | asUser(jwt) | getUserFromToken(jwt)
-  org/org.service.ts                 resolveSession | requireAgency | requireClient
-  org/types.ts                       AgencySession | ClientSession | OnboardingPending
-  auth/supabase-auth.guard.ts        Bearer → req.user / req.session
-  crypto/crypto.service.ts           AES-256-GCM encrypt/decrypt
-  meta/meta-store.service.ts         load/save credentials and tokens
-  meta/meta-api.service.ts           Meta Graph API calls + retry
+  supabase/supabase.service.ts
+  org/org.service.ts
+  org/types.ts
+  auth/supabase-auth.guard.ts
+  crypto/crypto.service.ts
+  meta/meta-store.service.ts
+  meta/meta-api.service.ts
   pipes/zod-validation.pipe.ts       Zod v4: result.error.issues (not .errors)
 ```
 
 ### Frontend (`apps/frontend/src/`)
 ```
 lib/api-client.ts                    apiFetch<T> — auto Bearer, throws ApiError
-lib/supabase/middleware.ts           NOTE: has /test bypass — remove when done
-lib/crypto.ts                        AES-256-GCM (used by meta/callback)
-lib/meta/                            used by meta/connect + meta/callback
-app/api/meta/callback/route.ts       PERMANENT (or remove in Phase 6)
-app/api/meta/connect/route.ts        remove in Phase 6
+lib/supabase/middleware.ts           Guard against missing NEXT_PUBLIC vars
+app/api/meta/callback/route.ts       Suporta platform mode via cookie
+app/api/meta/connect/route.ts        Suporta ?platform=1
+app/dashboard/settings/page.tsx      Conectar com Facebook (Meta Ads)
+app/login/page.tsx                   Continuar com Google + Facebook
 ```
 
 ---
 
 ## Security Rules
-1. `ENCRYPTION_KEY`: same in frontend + backend, **never change after prod data exists**
-2. `SUPABASE_SERVICE_ROLE_KEY`: validate request BEFORE any service_role query
-3. Nest CORS: only `WEB_ORIGIN` — never `*`
-4. Nest reads only `Authorization: Bearer` — never cookies
-5. Run `GRANT ALL ON ALL TABLES/SEQUENCES IN SCHEMA public` on new Supabase projects
+1. `ENCRYPTION_KEY`: mesmo no frontend + backend, **nunca mudar após ter dados prod**
+2. `SUPABASE_SERVICE_ROLE_KEY`: validar request ANTES de qualquer query service_role
+3. Nest CORS: só `WEB_ORIGIN` — nunca `*`
+4. Nest lê só `Authorization: Bearer` — nunca cookies
+5. Run `GRANT ALL ON ALL TABLES/SEQUENCES IN SCHEMA public` em novos projetos Supabase
 
 ---
 
 ## Known Gotchas
 - **Zod v4**: `.error.issues[0].message` — NOT `.errors`
-- **TS1272**: decorated params need `import type` for interfaces
 - **pnpm 11**: `allowBuilds` needed for `@nestjs/core`, `sharp`, `unrs-resolver`
-- **New Supabase key format**: `sb_publishable_*` / `sb_secret_*` — SDK accepts both
 - **New Supabase projects**: need explicit GRANTs on all tables + USAGE on schema
 - **Vercel serverless**: `api/index.js` (JS not TS) imports from `dist/` after `nest build`
 - **`@UsePipes` on method**: applies to ALL params — use `@Body(pipe)` instead
 - **invite bug fixed**: agency users blocked from accepting client invites
+- **createClient() in components**: NEVER at component body level — only inside functions/useEffect (causes SSG build failure)
+- **NEXT_PUBLIC_* vars**: inlined at build time — must be set in Vercel before build
+- **Middleware guard**: added null check for NEXT_PUBLIC vars to avoid MIDDLEWARE_INVOCATION_FAILED
+- **Facebook login**: accounts created with phone number may not return email via Graph API
+- **Two Meta Apps**: Business (meu-gestor) for Ads API, Consumer (myGest) for auth login
+- **Vercel Root Directory**: NEVER reset — frontend=apps/frontend, backend=apps/backend
+
+---
+
+## Supabase Production Config
+- Site URL: `https://meugestor-one.vercel.app`
+- Redirect URLs: `https://meugestor-one.vercel.app/**`
+- Facebook provider: enabled, App ID=1723020158823520 (myGest Consumer)
+- Google provider: 🔜 in progress
 
 ---
 
 ## Next Session Start
-1. Read this file
-2. Decide: implement Phase 6 (Facebook OAuth platform-level) or another task
-3. Phase 6 requires: create Meta App platform-level → configure Supabase Facebook provider → update onboarding flow
-4. Cleanup pending: remove `/test` bypass from `apps/frontend/src/lib/supabase/middleware.ts`
+1. Leia este arquivo
+2. Google Login: finalizar configuração no Google Cloud Console + Supabase
+3. Testar fluxo completo: login Google → dashboard → conectar Meta Ads
+4. Pendente: remover `/test` bypass do middleware
+5. Pendente: adicionar GRANT statements ao migration SQL
