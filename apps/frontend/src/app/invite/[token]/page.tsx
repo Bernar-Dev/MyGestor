@@ -17,7 +17,6 @@ interface InviteInfo {
 export default function InvitePage({ params }: { params: Promise<{ token: string }> }) {
     const { token } = use(params);
     const router = useRouter();
-    const supabase = createClient();
 
     const [info, setInfo] = useState<InviteInfo | null>(null);
     const [err, setErr] = useState("");
@@ -35,7 +34,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
                 const j = await apiFetch<InviteInfo>(`/invite/${token}`);
                 setInfo(j);
                 setEmail(j.email);
-                const { data: { user } } = await supabase.auth.getUser();
+                const { data: { user } } = await createClient().auth.getUser();
                 if (user && user.email?.toLowerCase() === j.email.toLowerCase()) {
                     setAuthed(true);
                     await accept();
@@ -52,7 +51,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     const signUp = async () => {
         if (!pwd) { toast.error("Crie uma senha"); return; }
         setBusy(true);
-        const { error } = await supabase.auth.signUp({
+        const { error } = await createClient().auth.signUp({
             email, password: pwd,
             options: { emailRedirectTo: `${location.origin}/auth/callback?invite=${token}` },
         });
@@ -64,7 +63,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     const login = async () => {
         if (!pwd) { toast.error("Digite a senha"); return; }
         setBusy(true);
-        const { error } = await supabase.auth.signInWithPassword({ email, password: pwd });
+        const { error } = await createClient().auth.signInWithPassword({ email, password: pwd });
         if (error) { toast.error(error.message); setBusy(false); return; }
         await accept();
         setBusy(false);

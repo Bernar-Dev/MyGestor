@@ -9,7 +9,6 @@ function LoginContent() {
     const params = useSearchParams();
     const next = params.get("next") || "/dashboard";
     const router = useRouter();
-    const supabase = createClient();
     const [email, setEmail] = useState("");
     const [pwd, setPwd] = useState("");
     const [busy, setBusy] = useState(false);
@@ -17,7 +16,7 @@ function LoginContent() {
 
     const signInGoogle = async () => {
         setBusy(true); setErr("");
-        const { error } = await supabase.auth.signInWithOAuth({
+        const { error } = await createClient().auth.signInWithOAuth({
             provider: "google",
             options: {
                 redirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
@@ -28,7 +27,7 @@ function LoginContent() {
 
     const signInFacebook = async () => {
         setBusy(true); setErr("");
-        const { error } = await supabase.auth.signInWithOAuth({
+        const { error } = await createClient().auth.signInWithOAuth({
             provider: "facebook",
             options: {
                 redirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
@@ -40,7 +39,7 @@ function LoginContent() {
     const signInEmail = async (e: React.FormEvent) => {
         e.preventDefault();
         setBusy(true); setErr("");
-        const { error } = await supabase.auth.signInWithPassword({ email, password: pwd });
+        const { error } = await createClient().auth.signInWithPassword({ email, password: pwd });
         if (error) { setErr(error.message); setBusy(false); return; }
         toast.success("Login OK");
         router.push(next);
@@ -49,7 +48,7 @@ function LoginContent() {
     const signUp = async () => {
         if (!email || !pwd) { setErr("Preencha email e senha"); return; }
         setBusy(true); setErr("");
-        const { error } = await supabase.auth.signUp({
+        const { error } = await createClient().auth.signUp({
             email, password: pwd,
             options: { emailRedirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
         });
