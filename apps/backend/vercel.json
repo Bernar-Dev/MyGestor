@@ -3,11 +3,11 @@
   "buildCommand": "pnpm --filter backend build",
   "installCommand": "pnpm install --frozen-lockfile",
   "functions": {
-    "apps/backend/api/index.js": {
+    "api/index.js": {
       "maxDuration": 30
     }
   },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/apps/backend/api/index" }
+    { "source": "/(.*)", "destination": "/api/index" }
   ]
 }
