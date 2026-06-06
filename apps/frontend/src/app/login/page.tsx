@@ -31,6 +31,7 @@ function LoginContent() {
             provider: "facebook",
             options: {
                 redirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+                scopes: "public_profile,email",
             },
         });
         if (error) { setErr(error.message); setBusy(false); }
