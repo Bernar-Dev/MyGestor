@@ -30,12 +30,16 @@ export class SupabaseService implements OnModuleInit {
     }
 
     // DB client — ONLY used for database operations. Never call auth methods on this.
+    // global.headers forces Authorization on every request (GET + POST/INSERT/PATCH/DELETE).
+    // Without this, supabase-js v2 omits Authorization when there is no active session,
+    // causing PostgREST to fall back to the anon role → RLS blocks INSERT.
     this._service = createClient(this.url, serviceKey, {
+      global: { headers: { Authorization: `Bearer ${serviceKey}` } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
     // Auth client — ONLY used for getUserFromToken(). Isolated so auth.getUser() cannot
-    // pollute the DB client's internal JWT state (session sharing between auth ↔ postgrest).
+    // pollute the DB client's internal JWT state.
     this._auth = createClient(this.url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
