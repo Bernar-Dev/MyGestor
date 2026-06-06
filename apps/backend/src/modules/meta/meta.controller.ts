@@ -57,18 +57,29 @@ export class MetaController {
   @Get('status')
   async getStatus(@CurrentSession() session: Session) {
     const agency = this.org.requireAgency(session);
-    const creds = await this.store.loadCredentials(agency.orgId);
-    const token = await this.store.loadToken(agency.orgId);
 
-    if (!creds) return { stage: 'no_credentials' };
-    if (!token) return { stage: 'no_token', appId: creds.app_id };
+    // Consulta em paralelo — token é verificado independente de ter credentials
+    const [creds, token] = await Promise.all([
+      this.store.loadCredentials(agency.orgId),
+      this.store.loadToken(agency.orgId),
+    ]);
+
+    if (!token) {
+      return {
+        stage: creds ? ('no_token' as const) : ('no_credentials' as const),
+        hasCredentials: !!creds,
+        appId: creds?.app_id ?? null,
+        appName: creds?.app_name ?? null,
+      };
+    }
 
     const ping = await this.metaApi.pingToken(token.access_token);
 
     return {
-      stage: ping.ok ? 'connected' : 'token_invalid',
-      appId: creds.app_id,
-      appName: creds.app_name,
+      stage: ping.ok ? ('connected' as const) : ('token_invalid' as const),
+      hasCredentials: !!creds,
+      appId: creds?.app_id ?? null,
+      appName: creds?.app_name ?? null,
       fbUserName: token.fb_user_name,
       fbUserId: token.fb_user_id,
       expiresAt: token.expires_at,

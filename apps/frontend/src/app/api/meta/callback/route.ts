@@ -7,11 +7,16 @@ import { resolveSession } from "@/lib/org";
 export const dynamic = "force-dynamic";
 
 /**
- * Callback do Facebook após autorização do owner da agência.
- *  1. valida state cookie + org cookie
+ * Callback do Facebook após o usuário autorizar o app.
+ *
+ * Suporta dois modos (lido do cookie meta_oauth_platform):
+ *  - platform=1 → usa META_PLATFORM_APP_ID/SECRET (env vars) — modo "Login com Facebook"
+ *  - platform=0 → usa App ID/Secret da própria agência (meta_credentials) — modo legado
+ *
+ *  1. Valida state cookie + org cookie
  *  2. code → short-lived → long-lived (~60d)
- *  3. /me pra pegar fb_user_id
- *  4. salva token cifrado por org_id
+ *  3. /me pra pegar fb_user_id + nome
+ *  4. Salva token cifrado por org_id em meta_tokens
  */
 export async function GET(request: NextRequest) {
     const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
@@ -20,13 +25,15 @@ export async function GET(request: NextRequest) {
     const state = searchParams.get("state");
     const fbError = searchParams.get("error_description") || searchParams.get("error");
 
-    if (fbError) return redirectWithMessage(origin, "error", fbError);
-    if (!code) return redirectWithMessage(origin, "error", "Codigo OAuth ausente");
+    if (fbError) return redirectError(origin, fbError);
+    if (!code) return redirectError(origin, "Codigo OAuth ausente");
 
     const cookieState = request.cookies.get("meta_oauth_state")?.value;
     const cookieOrg = request.cookies.get("meta_oauth_org")?.value;
+    const isPlatform = request.cookies.get("meta_oauth_platform")?.value === "1";
+
     if (!cookieState || cookieState !== state) {
-        return redirectWithMessage(origin, "error", "State invalido (possivel CSRF)");
+        return redirectError(origin, "State invalido (possivel CSRF)");
     }
 
     const sess = await resolveSession();
@@ -34,20 +41,31 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(new URL("/login", request.url));
     }
     if (cookieOrg && cookieOrg !== sess.orgId) {
-        return redirectWithMessage(origin, "error", "Org cookie nao confere");
+        return redirectError(origin, "Org cookie nao confere");
     }
 
-    const creds = await loadMetaCredentials(sess.orgId);
-    if (!creds) return redirectWithMessage(origin, "error", "Credenciais Meta nao encontradas");
+    let appId: string;
+    let appSecret: string;
+
+    if (isPlatform) {
+        appId = process.env.META_PLATFORM_APP_ID ?? "";
+        appSecret = process.env.META_PLATFORM_APP_SECRET ?? "";
+        if (!appId || !appSecret) {
+            return redirectError(origin, "Plataforma nao configurada — fale com o suporte");
+        }
+    } else {
+        const creds = await loadMetaCredentials(sess.orgId);
+        if (!creds) return redirectError(origin, "Credenciais Meta nao encontradas");
+        appId = creds.app_id;
+        appSecret = creds.app_secret;
+    }
 
     try {
         const redirectUri = buildRedirectUri(origin);
 
-        const shortTok = await exchangeCodeForToken({
-            appId: creds.app_id, appSecret: creds.app_secret, code, redirectUri,
-        });
+        const shortTok = await exchangeCodeForToken({ appId, appSecret, code, redirectUri });
         const longTok = await exchangeForLongLivedToken({
-            appId: creds.app_id, appSecret: creds.app_secret,
+            appId, appSecret,
             shortLivedToken: shortTok.access_token,
         });
         const me = await getMe(longTok.access_token);
@@ -60,15 +78,18 @@ export async function GET(request: NextRequest) {
             expiresInSeconds: longTok.expires_in,
         });
     } catch (e: any) {
-        return redirectWithMessage(origin, "error", e.message || "Falha ao concluir OAuth");
+        return redirectError(origin, e.message || "Falha ao concluir OAuth");
     }
 
-    const res = NextResponse.redirect(`${origin}/dashboard?meta=connected`);
+    const res = NextResponse.redirect(`${origin}/dashboard/settings?meta=connected`);
     res.cookies.delete("meta_oauth_state");
     res.cookies.delete("meta_oauth_org");
+    res.cookies.delete("meta_oauth_platform");
     return res;
 }
 
-function redirectWithMessage(origin: string, kind: "error" | "info", msg: string) {
-    return NextResponse.redirect(`${origin}/onboarding?${kind}=${encodeURIComponent(msg)}`);
+function redirectError(origin: string, msg: string) {
+    const url = new URL("/dashboard/settings", origin);
+    url.searchParams.set("meta_error", msg);
+    return NextResponse.redirect(url);
 }
