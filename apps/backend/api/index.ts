@@ -5,7 +5,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import type { INestApplication } from '@nestjs/common';
-import * as express from 'express';
+import express from 'express';
 import { AppModule } from '../src/app.module';
 
 const expressApp = express();
