@@ -21,11 +21,19 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.next({ request });
     }
 
+    // Guard: se as env vars não estiverem disponíveis no bundle, passa sem auth
+    // (evita MIDDLEWARE_INVOCATION_FAILED quando NEXT_PUBLIC_* está undefined)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) {
+        return NextResponse.next({ request });
+    }
+
     let response = NextResponse.next({ request });
 
     const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        supabaseUrl,
+        supabaseKey,
         {
             cookies: {
                 getAll() { return request.cookies.getAll(); },
