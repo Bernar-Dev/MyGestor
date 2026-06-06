@@ -28,6 +28,9 @@ function OnboardingContent() {
     const [redirectUri, setRedirectUri] = useState("");
     const [copiedRedirect, setCopiedRedirect] = useState(false);
     const [orgReady, setOrgReady] = useState(false);
+    const [showManual, setShowManual] = useState(false);
+    const [manualToken, setManualToken] = useState("");
+    const [savingToken, setSavingToken] = useState(false);
 
     useEffect(() => {
         setRedirectUri(`${location.origin}/api/meta/callback`);
@@ -96,6 +99,20 @@ function OnboardingContent() {
     };
 
     const connectFacebook = () => { window.location.href = "/api/meta/connect"; };
+
+    const saveManualToken = async () => {
+        if (!manualToken.trim()) { toast.error("Cole o token antes de salvar"); return; }
+        setSavingToken(true);
+        try {
+            const res = await apiFetch<{ ok: boolean; fbUserName?: string }>("/meta/token", {
+                method: "POST",
+                body: { accessToken: manualToken.trim() },
+            });
+            toast.success(`Conectado${res.fbUserName ? ` como ${res.fbUserName}` : ""}!`);
+            router.push("/dashboard");
+        } catch (e: any) { toast.error(e.message); }
+        finally { setSavingToken(false); }
+    };
 
     return (
         <main className="max-w-3xl mx-auto px-4 py-8 md:py-14">
@@ -255,6 +272,38 @@ function OnboardingContent() {
                     <button onClick={() => setStep(3)} className="btn-secondary w-full justify-center text-sm">
                         ← Trocar credenciais
                     </button>
+
+                    <div className="border-t border-white/10 pt-4">
+                        <button
+                            onClick={() => setShowManual(v => !v)}
+                            className="text-xs muted hover:underline w-full text-center"
+                        >
+                            {showManual ? "▲ Ocultar" : "▼ Inserir token manualmente (avançado)"}
+                        </button>
+                        {showManual && (
+                            <div className="mt-3 space-y-3">
+                                <p className="text-xs muted">
+                                    Cole um <strong>User Access Token</strong> do Meta para Developers (Ferramentas → Access Token). Deve ter os escopos: <em>ads_read, ads_management, business_management</em>.
+                                </p>
+                                <textarea
+                                    className="input text-xs font-mono"
+                                    rows={3}
+                                    value={manualToken}
+                                    onChange={e => setManualToken(e.target.value)}
+                                    placeholder="EAABsbCS..."
+                                    style={{ resize: "vertical" }}
+                                />
+                                <button
+                                    onClick={saveManualToken}
+                                    disabled={savingToken || !manualToken.trim()}
+                                    className="btn-primary w-full justify-center text-sm"
+                                >
+                                    {savingToken ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                                    Salvar token →
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 

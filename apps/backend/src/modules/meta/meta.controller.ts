@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body, HttpException } from '@nestjs/common';
 import { z } from 'zod';
 import { CurrentSession } from '../../common/auth/current-session.decorator';
 import { OrgService } from '../../common/org/org.service';
@@ -13,7 +13,12 @@ const CredentialsBody = z.object({
   appName: z.string().optional(),
 });
 
+const TokenBody = z.object({
+  accessToken: z.string().min(10, 'Token inválido'),
+});
+
 type CredentialsBodyType = z.infer<typeof CredentialsBody>;
+type TokenBodyType = z.infer<typeof TokenBody>;
 
 /**
  * GET  /api/meta/credentials — retorna app_id e redirect_uri (sem secret)
@@ -94,5 +99,24 @@ export class MetaController {
     const agency = this.org.requireAgency(session);
     await this.store.deleteToken(agency.orgId);
     return { ok: true };
+  }
+
+  /** POST /api/meta/token — salva token manualmente (sem OAuth) */
+  @Post('token')
+  async saveManualToken(
+    @CurrentSession() session: Session,
+    @Body(new ZodValidationPipe(TokenBody)) body: TokenBodyType,
+  ) {
+    const agency = this.org.requireAgency(session);
+    const ping = await this.metaApi.pingToken(body.accessToken);
+    if (!ping.ok) throw new HttpException(`Token inválido: ${ping.error}`, 400);
+    let me: { id: string; name: string } | undefined;
+    try { me = await this.metaApi.getMe(body.accessToken); } catch { /* ignora */ }
+    await this.store.saveToken(agency.orgId, {
+      accessToken: body.accessToken,
+      fbUserId: me?.id,
+      fbUserName: me?.name,
+    });
+    return { ok: true, fbUserName: me?.name };
   }
 }
