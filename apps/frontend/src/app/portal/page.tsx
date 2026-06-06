@@ -14,7 +14,6 @@ interface PortalMe {
 
 export default function PortalHome() {
     const router = useRouter();
-    const supabase = createClient();
     const [me, setMe] = useState<PortalMe | null>(null);
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState("");
@@ -25,7 +24,7 @@ export default function PortalHome() {
             .catch((e: any) => { setErr(e.message || "Erro"); setLoading(false); });
     }, []);
 
-    const logout = async () => { await supabase.auth.signOut(); router.push("/login"); };
+    const logout = async () => { await createClient().auth.signOut(); router.push("/login"); };
 
     if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin muted" /></div>;
     if (err) return (

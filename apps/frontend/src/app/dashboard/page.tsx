@@ -31,7 +31,6 @@ interface ClientRow {
 
 export default function Dashboard() {
     const router = useRouter();
-    const supabase = createClient();
     const [user, setUser] = useState<{ email?: string; name?: string } | null>(null);
     const [org, setOrg] = useState<OrgResp["org"]>();
     const [status, setStatus] = useState<StatusResp | null>(null);
@@ -42,6 +41,7 @@ export default function Dashboard() {
     const load = async () => {
         setLoading(true); setErr("");
         try {
+            const supabase = createClient();
             const { data: { user } } = await supabase.auth.getUser();
             setUser({ email: user?.email, name: (user?.user_metadata as any)?.full_name });
 
@@ -59,7 +59,7 @@ export default function Dashboard() {
 
     useEffect(() => { load(); /* eslint-disable-line */ }, []);
 
-    const logout = async () => { await supabase.auth.signOut(); router.push("/login"); };
+    const logout = async () => { await createClient().auth.signOut(); router.push("/login"); };
 
     const disconnect = async () => {
         if (!confirm("Desconectar conta Meta? Você precisará autorizar de novo.")) return;
