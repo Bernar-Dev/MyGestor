@@ -68,6 +68,7 @@ function LoginContent() {
                     <div>
                         <h1 className="font-bold">Newgestor</h1>
                         <p className="text-xs muted">Entrar na sua conta</p>
+                        {/* v2 */}
                     </div>
                 </div>
 
