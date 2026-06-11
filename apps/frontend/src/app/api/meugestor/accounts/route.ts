@@ -25,6 +25,9 @@ export async function GET(request: NextRequest) {
         const since = searchParams.get('since');
         const until = searchParams.get('until');
         const compare = searchParams.get('compare') !== 'false'; // default true
+        // Filtro opcional por IDs de conta (para analytics por cliente)
+        const idsParam = searchParams.get('ids');
+        const filterIds = idsParam ? new Set(idsParam.split(',').map(s => s.trim()).filter(Boolean)) : null;
 
         // Range absoluto (custom > preset)
         let range: MetaTimeRange;
@@ -40,14 +43,19 @@ export async function GET(request: NextRequest) {
 
         const allAccounts = await getAllAdAccounts(accessToken);
 
+        // Filtra por IDs se fornecido (ex: analytics de cliente específico)
+        const filteredAccounts = filterIds
+            ? allAccounts.filter(a => filterIds.has(a.id) || filterIds.has(`act_${a.account_id}`) || filterIds.has(a.account_id))
+            : allAccounts;
+
         // Sem filtro: queremos ver TUDO — ativas, pendentes, encerradas, sem anúncios.
         // Só buscamos insights de contas que potencialmente têm anúncios (qualquer status
         // exceto 101=encerrada permanentemente OU lifetime spend > 0).
         const batchSize = 25;
         const enriched: any[] = [];
 
-        for (let i = 0; i < allAccounts.length; i += batchSize) {
-            const batch = allAccounts.slice(i, i + batchSize);
+        for (let i = 0; i < filteredAccounts.length; i += batchSize) {
+            const batch = filteredAccounts.slice(i, i + batchSize);
             const results = await Promise.allSettled(
                 batch.map(async account => {
                     const lifetimeSpend = Number(account.amount_spent || 0);

@@ -1,12 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import Link from "next/link";
+import { apiFetch } from "@/lib/api-client";
 import {
-    BarChart3, LayoutDashboard, Lightbulb, Star, Users, DollarSign,
+    BarChart3, LayoutDashboard, Lightbulb, Users, DollarSign,
     MousePointerClick, Target, ChevronLeft,
     RefreshCw, Search, Loader2, AlertCircle, Eye, Menu, X,
     Building2, Layers, Hash, Brain, Wallet, Activity, Filter,
+    Settings, LogOut, ChevronDown,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
     LineChart, Line, CartesianGrid,
@@ -35,10 +39,14 @@ import { DEFAULT_KPIS, KpiCtx, aggregateRow } from "./lib/kpis";
 // PAGES (sidebar)
 // ─────────────────────────────────────────────────────────────
 const PAGES = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "favorites", label: "Meus Clientes", icon: Star },
+    { id: "dashboard", label: "Painel Geral", icon: LayoutDashboard },
     { id: "insights", label: "Insights", icon: Lightbulb },
 ];
+
+interface ClientRow {
+    id: string; name: string; company: string | null; status: string;
+    portal_enabled: boolean; ad_accounts_count: number;
+}
 
 // ─────────────────────────────────────────────────────────────
 // MÉTRICAS DEFAULT
@@ -101,6 +109,14 @@ export default function MeuGestorDashboard() {
     const [cmdkOpen, setCmdkOpen] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(true);
 
+    // Clientes reais
+    const [clients, setClients] = useState<ClientRow[]>([]);
+    const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+    const [selectedClientName, setSelectedClientName] = useState<string | null>(null);
+    const [clientAccountIds, setClientAccountIds] = useState<string | null>(null);
+    const [clientsOpen, setClientsOpen] = useState(true);
+    const [loadingClients, setLoadingClients] = useState(false);
+
     // ── Hidrata localStorage ──
     useEffect(() => {
         setFavorites(new Set(load<string[]>(KEYS.favorites, [])));
@@ -147,6 +163,50 @@ export default function MeuGestorDashboard() {
         return () => window.removeEventListener("keydown", onKey);
     }, []);
 
+    // ── Fetch clientes ──
+    useEffect(() => {
+        setLoadingClients(true);
+        apiFetch<{ clients: ClientRow[] }>("/clients")
+            .then(r => setClients(r.clients || []))
+            .catch(() => {})
+            .finally(() => setLoadingClients(false));
+    }, []);
+
+    // ── Selecionar cliente: busca contas atribuídas e filtra analytics ──
+    const selectClient = useCallback(async (c: ClientRow | null) => {
+        if (!c) {
+            setSelectedClientId(null);
+            setSelectedClientName(null);
+            setClientAccountIds(null);
+            setSelectedAccountId(null);
+            setSelectedCampaignId(null);
+            setSelectedAdsetId(null);
+            setSelectedAdId(null);
+            setAccountDetail(null);
+            setCampaignDetail(null);
+            setCurrentPage("dashboard");
+            return;
+        }
+        setSelectedClientId(c.id);
+        setSelectedClientName(c.name);
+        setSelectedAccountId(null);
+        setSelectedCampaignId(null);
+        setSelectedAdsetId(null);
+        setSelectedAdId(null);
+        setAccountDetail(null);
+        setCampaignDetail(null);
+        setCurrentPage("dashboard");
+        if (typeof window !== "undefined" && window.innerWidth < 769) setSidebarOpen(false);
+        try {
+            const r = await apiFetch<{ client: any; accounts: Array<{ ad_account_id: string }> }>(`/clients/${c.id}`);
+            const ids = (r.accounts || []).map((a: any) => a.ad_account_id).join(",");
+            setClientAccountIds(ids || null);
+        } catch {
+            setClientAccountIds(null);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     // ── Fetch contas ──
     const buildPeriodParams = useCallback(() => {
         const p = new URLSearchParams();
@@ -164,7 +224,9 @@ export default function MeuGestorDashboard() {
         accountsAbortRef.current = ctrl;
         setLoading(true); setError(null);
         try {
-            const res = await fetch(`/api/meugestor/accounts?${buildPeriodParams().toString()}`, { signal: ctrl.signal });
+            const params = buildPeriodParams();
+            if (clientAccountIds) params.set("ids", clientAccountIds);
+            const res = await fetch(`/api/meugestor/accounts?${params.toString()}`, { signal: ctrl.signal });
             const json = await res.json();
             if (!json.success) throw new Error(json.error || "Erro ao buscar contas");
             setAccounts(json.data);
@@ -174,7 +236,7 @@ export default function MeuGestorDashboard() {
         } finally {
             if (accountsAbortRef.current === ctrl) setLoading(false);
         }
-    }, [buildPeriodParams]);
+    }, [buildPeriodParams, clientAccountIds]);
 
     useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
 
@@ -289,7 +351,6 @@ export default function MeuGestorDashboard() {
     const visibleAccounts = useMemo(() => {
         let arr = accounts;
         if (onlyFavorites) arr = arr.filter(a => favorites.has(a.id));
-        if (currentPage === "favorites") arr = arr.filter(a => favorites.has(a.id));
         if (accountFilter === "active_ads") arr = arr.filter(a => a.has_ads_in_period);
         else if (accountFilter === "with_spend") arr = arr.filter(a => Number(a.spend || 0) > 0);
         else if (accountFilter === "issues") {
@@ -450,29 +511,106 @@ export default function MeuGestorDashboard() {
                     </div>
                     {sidebarOpen && <button onClick={() => setSidebarOpen(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer" }}><X style={{ width: 18, height: 18 }} /></button>}
                 </div>
-                <nav style={{ flex: 1, padding: "0.85rem 0.5rem" }}>
+                <nav style={{ padding: "0.85rem 0.5rem 0.4rem" }}>
                     {PAGES.map(p => {
                         const Icon = p.icon;
-                        const active = currentPage === p.id;
+                        const active = currentPage === p.id && !selectedClientId;
                         return (
-                            <button key={p.id} onClick={() => { setCurrentPage(p.id); setSelectedAccountId(null); setSelectedCampaignId(null); if (typeof window !== "undefined" && window.innerWidth < 769) setSidebarOpen(false); }}
+                            <button key={p.id} onClick={() => {
+                                setCurrentPage(p.id);
+                                setSelectedClientId(null); setSelectedClientName(null); setClientAccountIds(null);
+                                setSelectedAccountId(null); setSelectedCampaignId(null);
+                                if (typeof window !== "undefined" && window.innerWidth < 769) setSidebarOpen(false);
+                            }}
                                 className={`g-sidebar-link ${active ? "active" : ""}`}
                                 style={{ justifyContent: sidebarOpen ? "flex-start" : "center", padding: sidebarOpen ? "0.6rem 0.85rem" : "0.6rem", fontSize: "0.82rem" }}>
                                 <Icon style={{ width: 18, height: 18 }} />
                                 {sidebarOpen && <span>{p.label}</span>}
-                                {sidebarOpen && p.id === "favorites" && favorites.size > 0 && (
-                                    <span style={{ marginLeft: "auto", fontSize: "0.65rem", padding: "0.1rem 0.4rem", background: "rgba(76,110,245,0.25)", borderRadius: 9999, color: "#748ffc" }}>{favorites.size}</span>
-                                )}
                             </button>
                         );
                     })}
                 </nav>
-                <div style={{ padding: "0.85rem", borderTop: "1px solid var(--glass-border)", textAlign: sidebarOpen ? "left" : "center" }}>
+
+                {/* ── Seção Clientes ── */}
+                <div style={{ flex: 1, overflowY: "auto", padding: "0 0.5rem" }}>
+                    {sidebarOpen ? (
+                        <>
+                            <button
+                                onClick={() => setClientsOpen(v => !v)}
+                                style={{
+                                    width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+                                    padding: "0.5rem 0.85rem", background: "none", border: "none", cursor: "pointer",
+                                    color: "rgba(255,255,255,0.35)", fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+                                }}>
+                                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <Users style={{ width: 12, height: 12 }} /> Clientes
+                                    {clients.length > 0 && (
+                                        <span style={{ fontSize: "0.6rem", padding: "0.1rem 0.4rem", background: "rgba(76,110,245,0.2)", borderRadius: 999, color: "#748ffc" }}>{clients.length}</span>
+                                    )}
+                                </span>
+                                <ChevronDown style={{ width: 12, height: 12, transform: clientsOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+                            </button>
+                            {clientsOpen && (
+                                <div>
+                                    {/* Todos */}
+                                    <button
+                                        onClick={() => selectClient(null)}
+                                        className={`g-sidebar-link ${!selectedClientId ? "active" : ""}`}
+                                        style={{ justifyContent: "flex-start", padding: "0.5rem 0.85rem", fontSize: "0.78rem", width: "100%" }}>
+                                        <Building2 style={{ width: 14, height: 14 }} />
+                                        <span>Todas as contas</span>
+                                    </button>
+                                    {loadingClients ? (
+                                        <div style={{ padding: "0.5rem 1rem", display: "flex", alignItems: "center", gap: 6 }}>
+                                            <Loader2 style={{ width: 12, height: 12, color: "rgba(255,255,255,0.3)" }} className="g-pulse" />
+                                            <span style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.3)" }}>Carregando...</span>
+                                        </div>
+                                    ) : clients.length === 0 ? (
+                                        <p style={{ padding: "0.5rem 0.85rem", fontSize: "0.72rem", color: "rgba(255,255,255,0.25)" }}>Nenhum cliente</p>
+                                    ) : clients.map(c => (
+                                        <button
+                                            key={c.id}
+                                            onClick={() => selectClient(c)}
+                                            className={`g-sidebar-link ${selectedClientId === c.id ? "active" : ""}`}
+                                            style={{ justifyContent: "flex-start", padding: "0.45rem 0.85rem", fontSize: "0.78rem", width: "100%", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
+                                            <span style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>
+                                                <span style={{ width: 7, height: 7, borderRadius: "50%", background: selectedClientId === c.id ? "#a78bfa" : "rgba(255,255,255,0.15)", flexShrink: 0 }} />
+                                                {c.name}
+                                            </span>
+                                            {c.company && <span style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.3)", paddingLeft: 12 }}>{c.company}</span>}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        /* Sidebar recolhida: só ícone de clientes */
+                        <button
+                            onClick={() => setSidebarOpen(true)}
+                            className={`g-sidebar-link ${selectedClientId ? "active" : ""}`}
+                            style={{ justifyContent: "center", padding: "0.6rem", width: "100%" }}
+                            title="Clientes">
+                            <Users style={{ width: 18, height: 18 }} />
+                        </button>
+                    )}
+                </div>
+
+                <div style={{ padding: "0.85rem", borderTop: "1px solid var(--glass-border)", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                     <button onClick={() => setCmdkOpen(true)} className="g-btn-secondary"
                         style={{ width: "100%", display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem", fontSize: "0.7rem", justifyContent: sidebarOpen ? "flex-start" : "center" }}>
                         <Search style={{ width: 12, height: 12 }} />
                         {sidebarOpen && <><span>Buscar</span><kbd style={{ marginLeft: "auto", fontSize: "0.6rem", padding: "0.1rem 0.3rem", background: "rgba(255,255,255,0.06)", borderRadius: 3, color: "rgba(255,255,255,0.4)" }}>⌘K</kbd></>}
                     </button>
+                    {sidebarOpen && (
+                        <div style={{ display: "flex", gap: "0.35rem" }}>
+                            <Link href="/dashboard/clients" className="g-btn-secondary" style={{ flex: 1, display: "inline-flex", alignItems: "center", gap: 5, padding: "0.45rem", fontSize: "0.7rem", justifyContent: "center" }} title="Gerenciar clientes">
+                                <Users style={{ width: 12, height: 12 }} /> Gerenciar
+                            </Link>
+                            <Link href="/dashboard/settings" className="g-btn-secondary" style={{ display: "inline-flex", alignItems: "center", padding: "0.45rem", fontSize: "0.7rem" }} title="Configurações">
+                                <Settings style={{ width: 12, height: 12 }} />
+                            </Link>
+                        </div>
+                    )}
                 </div>
             </aside>
 
@@ -503,10 +641,11 @@ export default function MeuGestorDashboard() {
                                     : selectedCampaignId ? (accountDetail?.campaigns.find((c: any) => c.campaign_id === selectedCampaignId)?.campaign_name || "Campanha")
                                     : selectedAccountId ? (selectedAccount?.name || "Conta")
                                     : currentPage === "insights" ? "Insights da Operação"
-                                    : currentPage === "favorites" ? "Meus Clientes"
+                                    : selectedClientName ? selectedClientName
                                     : "Painel Geral"}
                             </h1>
                             <p style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.4)", fontWeight: 500 }}>
+                                {selectedClientName && !selectedAccountId && <span style={{ color: "#a78bfa", marginRight: 5 }}>Cliente ·</span>}
                                 {periodLabel}
                                 {periodMeta.previous && compare && <> · vs {periodMeta.previous.since} → {periodMeta.previous.until}</>}
                             </p>
@@ -519,14 +658,16 @@ export default function MeuGestorDashboard() {
                             accounts={
                                 selectedAccountId
                                     ? [selectedAccountId]
-                                    : onlyFavorites || currentPage === "favorites"
-                                        ? Array.from(favorites)
-                                        : undefined
+                                    : clientAccountIds
+                                        ? clientAccountIds.split(",").filter(Boolean)
+                                        : onlyFavorites
+                                            ? Array.from(favorites)
+                                            : undefined
                             }
                             scopeLabel={
                                 selectedAccountId
                                     ? (selectedAccount?.name || "Conta atual")
-                                    : undefined
+                                    : selectedClientName || undefined
                             }
                         />
                         <button onClick={fetchAccounts} disabled={loading} className="g-btn-secondary"
@@ -543,8 +684,8 @@ export default function MeuGestorDashboard() {
                 </header>
 
                 <div className="g-page-pad" style={{ padding: "1.5rem" }}>
-                    {/* ========== DASHBOARD / FAVORITES ========== */}
-                    {!selectedAccountId && (currentPage === "dashboard" || currentPage === "favorites") && (
+                    {/* ========== DASHBOARD ========== */}
+                    {!selectedAccountId && currentPage === "dashboard" && (
                         <div className="g-fade-in" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
                             {/* KPIs editáveis (dashboard agregado) */}
                             <KpiGrid ctx="dashboard" row={dashboardAggRow} selected={dashboardKpis} onOpenPicker={() => setKpiPickerOpen("dashboard")} />
@@ -555,20 +696,21 @@ export default function MeuGestorDashboard() {
                                     <div>
                                         <h3 style={{ fontSize: "0.95rem", fontWeight: 700, color: "white" }}>
                                             <Building2 style={{ width: 14, height: 14, display: "inline", marginRight: 6 }} />
-                                            {currentPage === "favorites" ? "Meus Clientes" : "Contas de Anúncio"}
+                                            {selectedClientName ? `${selectedClientName} — Contas` : "Contas de Anúncio"}
                                         </h3>
                                         <p style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)", marginTop: 2 }}>
-                                            {visibleAccounts.length} contas exibidas · {favorites.size} marcadas como cliente
+                                            {visibleAccounts.length} contas exibidas
+                                            {!selectedClientId && favorites.size > 0 && <> · {favorites.size} marcadas</>}
                                             {filterCounts.issues > 0 && (
                                                 <> · <span style={{ color: "#fbbf24" }}>{filterCounts.issues} com pendência{filterCounts.issues > 1 ? "s" : ""}</span></>
                                             )}
                                         </p>
                                     </div>
                                     <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-                                        {currentPage !== "favorites" && (
+                                        {!selectedClientId && (
                                             <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.75rem", color: "rgba(255,255,255,0.7)", cursor: "pointer" }}>
                                                 <input type="checkbox" checked={onlyFavorites} onChange={e => setOnlyFavorites(e.target.checked)} style={{ accentColor: "#fbbf24" }} />
-                                                <Filter style={{ width: 12, height: 12 }} /> Só clientes
+                                                <Filter style={{ width: 12, height: 12 }} /> Só marcados
                                             </label>
                                         )}
                                         <div style={{ position: "relative" }}>
