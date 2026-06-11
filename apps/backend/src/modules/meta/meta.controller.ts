@@ -101,6 +101,15 @@ export class MetaController {
     return { ok: true };
   }
 
+  /** GET /api/meta/access-token — devolve token decriptado para API routes server-side */
+  @Get('access-token')
+  async getAccessToken(@CurrentSession() session: Session) {
+    const agency = this.org.requireAgency(session);
+    const token = await this.store.loadToken(agency.orgId);
+    if (!token) throw new HttpException('Token Meta não configurado. Conclua o onboarding.', 404);
+    return { accessToken: token.access_token };
+  }
+
   /** POST /api/meta/token — salva token manualmente (sem OAuth) */
   @Post('token')
   async saveManualToken(

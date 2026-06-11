@@ -81,6 +81,7 @@ export default function Dashboard() {
                     </div>
                 </div>
                 <nav className="flex gap-2">
+                    <Link href="/dashboard/analytics" className="btn-primary"><BarChart3 className="w-4 h-4" /> Analytics</Link>
                     <Link href="/dashboard/clients" className="btn-secondary"><Users className="w-4 h-4" /> Clientes</Link>
                     <Link href="/dashboard/settings" className="btn-secondary"><Settings className="w-4 h-4" /> Config</Link>
                     <button onClick={load} className="btn-secondary" disabled={loading}>
