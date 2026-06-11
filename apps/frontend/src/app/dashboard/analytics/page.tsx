@@ -116,6 +116,10 @@ export default function MeuGestorDashboard() {
     const [clientAccountIds, setClientAccountIds] = useState<string | null>(null);
     const [clientsOpen, setClientsOpen] = useState(true);
     const [loadingClients, setLoadingClients] = useState(false);
+    // Contas que o usuário cadastrou no sistema (base para "Todas as contas")
+    const [agencyAccountIds, setAgencyAccountIds] = useState<string | null>(null);
+    // true após o fetch de contas da agência completar (com ou sem resultados)
+    const [agencyAccountsReady, setAgencyAccountsReady] = useState(false);
 
     // ── Hidrata localStorage ──
     useEffect(() => {
@@ -163,8 +167,22 @@ export default function MeuGestorDashboard() {
         return () => window.removeEventListener("keydown", onKey);
     }, []);
 
-    // ── Fetch clientes ──
+    // ── Fetch contas da agência (base) + clientes ──
     useEffect(() => {
+        // Contas Meta que o usuário adicionou ao sistema (managed)
+        apiFetch<{ success: boolean; accounts: Array<{ account_id: string }> }>("/accounts/managed")
+            .then(r => {
+                if (r.success && r.accounts?.length) {
+                    const ids = r.accounts.map(a =>
+                        a.account_id.startsWith("act_") ? a.account_id : `act_${a.account_id}`
+                    ).join(",");
+                    setAgencyAccountIds(ids);
+                }
+            })
+            .catch(() => {})
+            .finally(() => setAgencyAccountsReady(true)); // mesmo com erro, marca como pronto
+
+        // Lista de clientes
         setLoadingClients(true);
         apiFetch<{ clients: ClientRow[] }>("/clients")
             .then(r => setClients(r.clients || []))
@@ -225,7 +243,9 @@ export default function MeuGestorDashboard() {
         setLoading(true); setError(null);
         try {
             const params = buildPeriodParams();
-            if (clientAccountIds) params.set("ids", clientAccountIds);
+            // Prioridade: cliente selecionado → contas da agência → sem filtro (nunca)
+            const idsFilter = clientAccountIds ?? agencyAccountIds;
+            if (idsFilter) params.set("ids", idsFilter);
             const res = await fetch(`/api/meugestor/accounts?${params.toString()}`, { signal: ctrl.signal });
             const json = await res.json();
             if (!json.success) throw new Error(json.error || "Erro ao buscar contas");
@@ -236,9 +256,12 @@ export default function MeuGestorDashboard() {
         } finally {
             if (accountsAbortRef.current === ctrl) setLoading(false);
         }
-    }, [buildPeriodParams, clientAccountIds]);
+    }, [buildPeriodParams, clientAccountIds, agencyAccountIds]);
 
-    useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
+    // Só dispara após saber as contas da agência (para não buscar tudo da Meta)
+    useEffect(() => {
+        if (agencyAccountsReady) fetchAccounts();
+    }, [fetchAccounts, agencyAccountsReady]);
 
     // ── Fetch detalhe ──
     const detailAbortRef = useRef<AbortController | null>(null);

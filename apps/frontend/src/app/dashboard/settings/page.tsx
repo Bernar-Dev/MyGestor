@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
     ArrowLeft, Save, Loader2, Settings as Cog, Link2, Unlink,
-    ExternalLink, CircleCheck, AlertCircle,
+    ExternalLink, CircleCheck, AlertCircle, Building2, Check, Plus, Trash2, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api-client";
@@ -12,6 +12,11 @@ interface Org {
     id: string; name: string; slug: string; plan: string;
     logo_url: string | null; primary_color: string;
     max_clients: number; max_ad_accounts: number;
+}
+
+interface MetaAccount {
+    id: string; account_id: string; name: string; currency: string;
+    account_status?: number; amount_spent?: string;
 }
 
 interface StatusResp {
@@ -38,6 +43,12 @@ export default function SettingsPage() {
     const [status, setStatus] = useState<StatusResp | null>(null);
     const [busy, setBusy] = useState(false);
 
+    // Contas Meta
+    const [allMetaAccounts, setAllMetaAccounts] = useState<MetaAccount[]>([]);
+    const [managedIds, setManagedIds] = useState<Set<string>>(new Set());
+    const [loadingAccounts, setLoadingAccounts] = useState(false);
+    const [togglingId, setTogglingId] = useState<string | null>(null);
+
     const load = async () => {
         const [o, s] = await Promise.all([
             apiFetch<{ org: Org }>("/org"),
@@ -47,8 +58,43 @@ export default function SettingsPage() {
         setStatus(s);
     };
 
+    const loadAccounts = async () => {
+        setLoadingAccounts(true);
+        try {
+            const [all, managed] = await Promise.all([
+                apiFetch<{ success: boolean; accounts: MetaAccount[] }>("/accounts"),
+                apiFetch<{ success: boolean; accounts: Array<{ account_id: string }> }>("/accounts/managed"),
+            ]);
+            setAllMetaAccounts(all.accounts || []);
+            setManagedIds(new Set((managed.accounts || []).map(a => a.account_id)));
+        } catch { }
+        finally { setLoadingAccounts(false); }
+    };
+
+    const toggleAccount = async (acc: MetaAccount) => {
+        const normId = acc.account_id.startsWith("act_") ? acc.account_id : `act_${acc.account_id}`;
+        const isManaged = managedIds.has(normId);
+        setTogglingId(normId);
+        try {
+            if (isManaged) {
+                await apiFetch(`/accounts/managed/${encodeURIComponent(normId)}`, { method: "DELETE" });
+                setManagedIds(prev => { const n = new Set(prev); n.delete(normId); return n; });
+                toast.success("Conta removida do dashboard");
+            } else {
+                await apiFetch("/accounts/managed", {
+                    method: "POST",
+                    body: { account_id: normId, account_name: acc.name, currency: acc.currency },
+                });
+                setManagedIds(prev => new Set([...prev, normId]));
+                toast.success("Conta adicionada ao dashboard");
+            }
+        } catch (e: any) { toast.error(e.message); }
+        finally { setTogglingId(null); }
+    };
+
     useEffect(() => {
         load();
+        loadAccounts();
 
         // Mostra feedback do callback OAuth
         const params = new URLSearchParams(window.location.search);
@@ -237,6 +283,88 @@ export default function SettingsPage() {
                         )
                     )}
                 </section>
+                {/* Contas Meta gerenciadas */}
+                <section className="glass">
+                    <div className="p-4 md:p-5 border-b flex items-center justify-between" style={{ borderColor: "var(--color-glass-border)" }}>
+                        <div>
+                            <h2 className="font-bold flex items-center gap-2"><Building2 className="w-4 h-4" /> Contas Meta no dashboard</h2>
+                            <p className="text-xs muted mt-1">
+                                Selecione quais contas de anúncio aparecem no seu Painel Geral.
+                                Contas não selecionadas ficam ocultas — mas você ainda pode atribuí-las a clientes.
+                            </p>
+                        </div>
+                        <button
+                            onClick={loadAccounts}
+                            disabled={loadingAccounts}
+                            className="btn-secondary text-xs"
+                            title="Recarregar lista"
+                        >
+                            <RefreshCw className={`w-3 h-3 ${loadingAccounts ? "animate-spin" : ""}`} />
+                        </button>
+                    </div>
+
+                    {loadingAccounts ? (
+                        <div className="p-8 flex items-center justify-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin muted" />
+                            <span className="muted text-sm">Carregando contas...</span>
+                        </div>
+                    ) : status?.stage !== "connected" ? (
+                        <div className="p-6 text-center">
+                            <p className="muted text-sm">Conecte sua conta Meta primeiro para ver as contas disponíveis.</p>
+                        </div>
+                    ) : allMetaAccounts.length === 0 ? (
+                        <div className="p-6 text-center">
+                            <p className="muted text-sm">Nenhuma conta encontrada no token Meta.</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="p-3 border-b" style={{ borderColor: "var(--color-glass-border)", background: "rgba(167,139,250,0.05)" }}>
+                                <p className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
+                                    <span style={{ color: "#a78bfa" }}>{managedIds.size}</span> de {allMetaAccounts.length} contas selecionadas para o dashboard
+                                </p>
+                            </div>
+                            <ul className="divide-y" style={{ borderColor: "var(--color-glass-border)" }}>
+                                {allMetaAccounts.map(acc => {
+                                    const normId = acc.account_id.startsWith("act_") ? acc.account_id : `act_${acc.account_id}`;
+                                    const managed = managedIds.has(normId);
+                                    const toggling = togglingId === normId;
+                                    return (
+                                        <li key={acc.id} className="flex items-center justify-between p-3 gap-3">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className={`w-3 h-3 rounded-sm flex-shrink-0 flex items-center justify-center transition-colors`}
+                                                    style={{
+                                                        background: managed ? "#a78bfa" : "rgba(255,255,255,0.08)",
+                                                        border: `1px solid ${managed ? "#a78bfa" : "rgba(255,255,255,0.15)"}`,
+                                                    }}>
+                                                    {managed && <Check className="w-2 h-2 text-white" />}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium truncate">{acc.name}</p>
+                                                    <p className="text-xs muted">{normId} · {acc.currency}</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => toggleAccount(acc)}
+                                                disabled={toggling}
+                                                className={managed ? "btn-secondary text-xs" : "btn-primary text-xs"}
+                                                style={managed ? { color: "#fca5a5" } : {}}
+                                            >
+                                                {toggling ? (
+                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                ) : managed ? (
+                                                    <><Trash2 className="w-3 h-3" /> Remover</>
+                                                ) : (
+                                                    <><Plus className="w-3 h-3" /> Adicionar</>
+                                                )}
+                                            </button>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </>
+                    )}
+                </section>
+
             </main>
         </div>
     );
