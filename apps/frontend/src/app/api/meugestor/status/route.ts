@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getMetaAccessToken } from '@/lib/meta-token';
 
 const FB_GRAPH_URL = 'https://graph.facebook.com/v22.0';
 
