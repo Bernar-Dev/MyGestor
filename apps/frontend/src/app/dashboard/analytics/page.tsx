@@ -177,12 +177,11 @@ export default function MeuGestorDashboard() {
                         a.account_id.startsWith("act_") ? a.account_id : `act_${a.account_id}`
                     ).join(",");
                     setAgencyAccountIds(ids);
-                    setAgencyState("ready");
-                } else {
-                    setAgencyState("no_accounts");
                 }
+                // Se vazio ou tabela não existe → fallback: busca tudo (sem filtro)
+                setAgencyState("ready");
             })
-            .catch(() => setAgencyState("no_accounts")); // tabela não existe ainda → pede configurar
+            .catch(() => setAgencyState("ready")); // tabela não existe ainda → fallback sem filtro
 
         // Lista de clientes
         setLoadingClients(true);
@@ -245,10 +244,9 @@ export default function MeuGestorDashboard() {
         setLoading(true); setError(null);
         try {
             const params = buildPeriodParams();
-            // Sempre filtra — nunca busca tudo da Meta
+            // Filtra por cliente ou contas gerenciadas; sem filtro = mostra tudo (fallback)
             const idsFilter = clientAccountIds ?? agencyAccountIds;
-            if (!idsFilter) { setLoading(false); return; } // sem contas configuradas
-            params.set("ids", idsFilter);
+            if (idsFilter) params.set("ids", idsFilter);
             const res = await fetch(`/api/meugestor/accounts?${params.toString()}`, { signal: ctrl.signal });
             const json = await res.json();
             if (!json.success) throw new Error(json.error || "Erro ao buscar contas");
@@ -492,24 +490,6 @@ export default function MeuGestorDashboard() {
                 <div style={{ textAlign: "center" }}>
                     <Loader2 style={{ width: 40, height: 40, color: "#4c6ef5", margin: "0 auto 1rem" }} className="g-pulse" />
                     <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.875rem" }}>Carregando configurações...</p>
-                </div>
-            </div>
-        );
-    }
-
-    // ── Estado: nenhuma conta configurada ──
-    if (agencyState === "no_accounts" && !clientAccountIds) {
-        return (
-            <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <div className="g-glass" style={{ padding: "2rem", textAlign: "center", maxWidth: 480 }}>
-                    <Building2 style={{ width: 48, height: 48, color: "#a78bfa", margin: "0 auto 1rem" }} />
-                    <h3 style={{ color: "white", fontSize: "1.05rem", fontWeight: 700, marginBottom: "0.5rem" }}>Nenhuma conta configurada</h3>
-                    <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.85rem", marginBottom: "1.5rem" }}>
-                        Para ver o dashboard, vá em Configurações e selecione quais contas Meta você quer gerenciar.
-                    </p>
-                    <a href="/dashboard/settings" className="g-btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
-                        <Settings style={{ width: 16, height: 16 }} /> Ir para Configurações
-                    </a>
                 </div>
             </div>
         );
