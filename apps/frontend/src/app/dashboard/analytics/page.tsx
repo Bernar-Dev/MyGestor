@@ -120,6 +120,9 @@ export default function MeuGestorDashboard() {
     const [agencyAccountIds, setAgencyAccountIds] = useState<string | null>(null);
     // "ready" = fetch de contas gerenciadas completou; "no_accounts" = completou mas sem contas
     const [agencyState, setAgencyState] = useState<"loading" | "no_accounts" | "ready">("loading");
+    // Alerta de token: null | { type: "expiring"; daysLeft: number } | { type: "invalid" }
+    const [tokenAlert, setTokenAlert] = useState<null | { type: "expiring"; daysLeft: number } | { type: "invalid" }>(null);
+    const [refreshingToken, setRefreshingToken] = useState(false);
 
     // ── Hidrata localStorage ──
     useEffect(() => {
@@ -165,6 +168,20 @@ export default function MeuGestorDashboard() {
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
+    }, []);
+
+    // ── Verifica saúde do token Meta no mount ──
+    useEffect(() => {
+        apiFetch<{ stage: string; expiresAt?: string | null }>("/meta/status")
+            .then(r => {
+                if (r.stage === "token_invalid") {
+                    setTokenAlert({ type: "invalid" });
+                } else if (r.expiresAt) {
+                    const daysLeft = (new Date(r.expiresAt).getTime() - Date.now()) / 86_400_000;
+                    if (daysLeft < 7) setTokenAlert({ type: "expiring", daysLeft: Math.max(0, Math.floor(daysLeft)) });
+                }
+            })
+            .catch(() => { /* ignora — não bloqueia dashboard */ });
     }, []);
 
     // ── Fetch contas da agência (base) + clientes ──
@@ -351,6 +368,19 @@ export default function MeuGestorDashboard() {
         setSelectedAccountId(null); setAccountDetail(null);
     };
 
+    const handleRefreshToken = async () => {
+        setRefreshingToken(true);
+        try {
+            await apiFetch("/meta/refresh", { method: "POST" });
+            setTokenAlert(null);
+            fetchAccounts();
+        } catch (e: any) {
+            alert("Não foi possível renovar o token: " + (e.message || "Erro desconhecido"));
+        } finally {
+            setRefreshingToken(false);
+        }
+    };
+
     const handleToggleStatus = async (id: string, currentStatus: string, kind: "campaign" | "ad") => {
         const newStatus = currentStatus === "PAUSED" ? "ACTIVE" : "PAUSED";
         if (!confirm(`Deseja ${newStatus === "PAUSED" ? "PAUSAR" : "ATIVAR"} ${kind === "campaign" ? "esta campanha" : "este anúncio"}?`)) return;
@@ -508,16 +538,29 @@ export default function MeuGestorDashboard() {
     }
 
     if (error) {
+        const isTokenError = /token|session|oauth|access|authen/i.test(error);
         return (
             <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div className="g-glass" style={{ padding: "2rem", textAlign: "center", maxWidth: 460 }}>
                     <AlertCircle style={{ width: 48, height: 48, color: "#f87171", margin: "0 auto 1rem" }} />
-                    <h3 style={{ color: "white", fontSize: "1.05rem", fontWeight: 700, marginBottom: "0.5rem" }}>Erro ao carregar</h3>
-                    <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</p>
+                    <h3 style={{ color: "white", fontSize: "1.05rem", fontWeight: 700, marginBottom: "0.5rem" }}>
+                        {isTokenError ? "Sessão expirada" : "Erro ao carregar"}
+                    </h3>
+                    <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.85rem", marginBottom: "1rem" }}>
+                        {isTokenError
+                            ? "O token de acesso ao Meta foi invalidado. Reconecte sua conta para continuar."
+                            : error}
+                    </p>
                     <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center", flexWrap: "wrap" }}>
-                        <button onClick={fetchAccounts} className="g-btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
-                            <RefreshCw style={{ width: 16, height: 16 }} /> Tentar novamente
-                        </button>
+                        {isTokenError ? (
+                            <a href="/dashboard/settings" className="g-btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+                                <Settings style={{ width: 16, height: 16 }} /> Reconectar com Meta
+                            </a>
+                        ) : (
+                            <button onClick={fetchAccounts} className="g-btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+                                <RefreshCw style={{ width: 16, height: 16 }} /> Tentar novamente
+                            </button>
+                        )}
                         <a href="/dashboard/settings" className="g-btn-secondary" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
                             <Settings style={{ width: 16, height: 16 }} /> Configurações
                         </a>
@@ -533,6 +576,40 @@ export default function MeuGestorDashboard() {
     return (
         <div style={{ minHeight: "100vh" }}>
             {anyLoading && <div className="g-loadbar" />}
+            {/* Banner de alerta do token Meta */}
+            {tokenAlert && (
+                <div style={{
+                    position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+                    background: tokenAlert.type === "invalid" ? "rgba(239,68,68,0.15)" : "rgba(245,158,11,0.15)",
+                    borderBottom: `1px solid ${tokenAlert.type === "invalid" ? "rgba(239,68,68,0.4)" : "rgba(245,158,11,0.4)"}`,
+                    backdropFilter: "blur(8px)", padding: "0.6rem 1.5rem",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: "1rem", flexWrap: "wrap",
+                }}>
+                    <AlertCircle style={{ width: 16, height: 16, color: tokenAlert.type === "invalid" ? "#f87171" : "#fbbf24", flexShrink: 0 }} />
+                    <span style={{ color: tokenAlert.type === "invalid" ? "#fca5a5" : "#fde68a", fontSize: "0.82rem" }}>
+                        {tokenAlert.type === "invalid"
+                            ? "Token Meta inválido — reconecte sua conta para continuar recebendo dados."
+                            : `Token Meta expira em ${tokenAlert.daysLeft} dia${tokenAlert.daysLeft !== 1 ? "s" : ""}. Renove para evitar interrupções.`
+                        }
+                    </span>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                        {tokenAlert.type === "expiring" && (
+                            <button onClick={handleRefreshToken} disabled={refreshingToken}
+                                style={{ background: "rgba(245,158,11,0.25)", border: "1px solid rgba(245,158,11,0.5)", color: "#fde68a", borderRadius: "0.4rem", padding: "0.25rem 0.75rem", fontSize: "0.78rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                                {refreshingToken ? <Loader2 style={{ width: 12, height: 12 }} className="g-pulse" /> : <RefreshCw style={{ width: 12, height: 12 }} />}
+                                {refreshingToken ? "Renovando..." : "Renovar token"}
+                            </button>
+                        )}
+                        <a href="/dashboard/settings" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)", borderRadius: "0.4rem", padding: "0.25rem 0.75rem", fontSize: "0.78rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                            <Settings style={{ width: 12, height: 12 }} />
+                            {tokenAlert.type === "invalid" ? "Reconectar" : "Configurações"}
+                        </a>
+                        <button onClick={() => setTokenAlert(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", padding: "0.25rem", display: "flex" }}>
+                            <X style={{ width: 14, height: 14 }} />
+                        </button>
+                    </div>
+                </div>
+            )}
             {/* SIDEBAR */}
             {sidebarOpen && <div className="g-sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
             <aside className={`g-sidebar ${sidebarOpen ? "is-open" : ""}`} style={{

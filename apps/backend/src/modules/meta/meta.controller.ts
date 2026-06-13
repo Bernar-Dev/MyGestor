@@ -101,13 +101,62 @@ export class MetaController {
     return { ok: true };
   }
 
-  /** GET /api/meta/access-token — devolve token decriptado para API routes server-side */
+  /** GET /api/meta/access-token — devolve token decriptado; auto-renova se expira em < 7 dias */
   @Get('access-token')
   async getAccessToken(@CurrentSession() session: Session) {
     const agency = this.org.requireAgency(session);
     const token = await this.store.loadToken(agency.orgId);
     if (!token) throw new HttpException('Token Meta não configurado. Conclua o onboarding.', 404);
+
+    // Auto-refresh se expira em menos de 7 dias
+    if (token.expires_at) {
+      const daysLeft = (new Date(token.expires_at).getTime() - Date.now()) / 86_400_000;
+      if (daysLeft < 7) {
+        try {
+          await this._doRefresh(agency.orgId, token.access_token);
+          const refreshed = await this.store.loadToken(agency.orgId);
+          return { accessToken: refreshed!.access_token, refreshed: true };
+        } catch { /* retorna token atual; vai falhar na próxima chamada */ }
+      }
+    }
+
     return { accessToken: token.access_token };
+  }
+
+  /** POST /api/meta/refresh — renova o token long-lived por mais 60 dias */
+  @Post('refresh')
+  async refreshToken(@CurrentSession() session: Session) {
+    const agency = this.org.requireAgency(session);
+    const token = await this.store.loadToken(agency.orgId);
+    if (!token) throw new HttpException('Token Meta não configurado', 404);
+    try {
+      const expiresAt = await this._doRefresh(agency.orgId, token.access_token);
+      return { ok: true, expiresAt };
+    } catch (e: any) {
+      throw new HttpException(e?.message || 'Falha ao renovar token', 400);
+    }
+  }
+
+  private async _doRefresh(orgId: string, currentToken: string): Promise<string | null> {
+    const [creds, existing] = await Promise.all([
+      this.store.loadCredentials(orgId),
+      this.store.loadToken(orgId),
+    ]);
+    if (!creds) throw new Error('Credenciais Meta não configuradas');
+    const result = await this.metaApi.exchangeForLongLivedToken({
+      appId: creds.app_id,
+      appSecret: creds.app_secret,
+      shortLivedToken: currentToken,
+    });
+    await this.store.saveToken(orgId, {
+      accessToken: result.access_token,
+      expiresInSeconds: result.expires_in,
+      fbUserId: existing?.fb_user_id ?? undefined,
+      fbUserName: existing?.fb_user_name ?? undefined,
+      scopes: existing?.scopes ?? undefined,
+    });
+    const token = await this.store.loadToken(orgId);
+    return token?.expires_at ?? null;
   }
 
   /** POST /api/meta/token — salva token manualmente (sem OAuth) */

@@ -42,6 +42,7 @@ export default function SettingsPage() {
     const [org, setOrg] = useState<Org | null>(null);
     const [status, setStatus] = useState<StatusResp | null>(null);
     const [busy, setBusy] = useState(false);
+    const [refreshingToken, setRefreshingToken] = useState(false);
 
     // Contas Meta
     const [allMetaAccounts, setAllMetaAccounts] = useState<MetaAccount[]>([]);
@@ -129,6 +130,19 @@ export default function SettingsPage() {
         load();
     };
 
+    const refreshToken = async () => {
+        setRefreshingToken(true);
+        try {
+            await apiFetch("/meta/refresh", { method: "POST" });
+            toast.success("Token renovado por mais 60 dias!");
+            load();
+        } catch (e: any) {
+            toast.error("Não foi possível renovar: " + (e.message || "Tente reconectar manualmente"));
+        } finally {
+            setRefreshingToken(false);
+        }
+    };
+
     if (!org) return (
         <div className="min-h-screen flex items-center justify-center">
             <Loader2 className="w-6 h-6 animate-spin muted" />
@@ -200,6 +214,10 @@ export default function SettingsPage() {
                                     </p>
                                 )}
                                 <div className="flex flex-wrap gap-2 mt-4">
+                                    <button onClick={refreshToken} disabled={refreshingToken} className="btn-primary text-xs flex items-center gap-1.5">
+                                        {refreshingToken ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                        {refreshingToken ? "Renovando..." : "Renovar token (+60 dias)"}
+                                    </button>
                                     <a href="/api/meta/connect?platform=1" className="btn-secondary text-xs flex items-center gap-1.5">
                                         <IconFacebook className="w-3 h-3" /> Reconectar via Facebook
                                     </a>
