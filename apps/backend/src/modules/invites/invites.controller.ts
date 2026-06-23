@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { CurrentUser } from '../../common/auth/current-user.decorator';
 import { Public } from '../../common/auth/public.decorator';
 import { SupabaseService } from '../../common/supabase/supabase.service';
@@ -42,6 +42,71 @@ export class InvitesController {
       org_logo_url: org?.logo_url,
       org_primary_color: org?.primary_color,
     };
+  }
+
+  /** POST /api/invite/:token/signup — cria conta com senha, já confirmada, e aceita o convite */
+  @Public()
+  @Post(':token/signup')
+  async signup(
+    @Param('token') token: string,
+    @Body() body: { password: string },
+  ) {
+    if (!body.password || body.password.length < 6) {
+      throw new HttpError(400, 'Senha deve ter pelo menos 6 caracteres');
+    }
+    const svc = this.supabase.service();
+
+    const { data: invite } = await svc
+      .from('client_invitations')
+      .select('id, email, expires_at, accepted_at, client_id, org_id')
+      .eq('token', token)
+      .maybeSingle();
+    if (!invite) throw new HttpError(404, 'Convite inválido');
+    if (invite.accepted_at) throw new HttpError(410, 'Convite já aceito');
+    if (new Date(invite.expires_at).getTime() < Date.now()) {
+      throw new HttpError(410, 'Convite expirado');
+    }
+
+    // Cria usuário já confirmado (sem precisar de email de confirmação)
+    let userId: string;
+    const { data: created, error: createErr } = await svc.auth.admin.createUser({
+      email: invite.email,
+      password: body.password,
+      email_confirm: true,
+    });
+
+    if (createErr) {
+      // Usuário já existe — apenas atualiza a senha e confirma
+      const { data: existing } = await svc.auth.admin.listUsers();
+      const found = existing?.users?.find(u => u.email?.toLowerCase() === invite.email.toLowerCase());
+      if (!found) throw new HttpError(500, createErr.message);
+      await svc.auth.admin.updateUserById(found.id, {
+        password: body.password,
+        email_confirm: true,
+      });
+      userId = found.id;
+    } else {
+      userId = created.user.id;
+    }
+
+    // Aceita o convite
+    await svc.from('clients').update({
+      auth_user_id: userId,
+      portal_enabled: true,
+      updated_at: new Date().toISOString(),
+    }).eq('id', invite.client_id);
+
+    await svc.from('profiles').update({
+      role: 'client',
+      client_id: invite.client_id,
+      current_org_id: null,
+    }).eq('id', userId);
+
+    await svc.from('client_invitations')
+      .update({ accepted_at: new Date().toISOString() })
+      .eq('id', invite.id);
+
+    return { ok: true };
   }
 
   @Post(':token')
