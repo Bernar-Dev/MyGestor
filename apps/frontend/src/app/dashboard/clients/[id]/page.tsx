@@ -376,6 +376,12 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                                     >
                                         <RefreshCw className={`w-3 h-3 ${analyticsLoading ? "animate-spin" : ""}`} />
                                     </button>
+                                    <div style={{ marginLeft: "auto" }}>
+                                        <button onClick={openInvite} className="btn-secondary text-xs" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                                            <Send className="w-3 h-3" />
+                                            {client.portal_enabled ? "Reenviar acesso" : "Convidar cliente"}
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {analyticsError && (
