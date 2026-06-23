@@ -78,22 +78,6 @@ export class ClientsController {
     const sess = this.org.requireAgency(session);
     const svc = this.supabase.service();
 
-    const { data: org } = await svc
-      .from('organizations')
-      .select('max_clients')
-      .eq('id', sess.orgId)
-      .single();
-    const { count } = await svc
-      .from('clients')
-      .select('id', { count: 'exact', head: true })
-      .eq('org_id', sess.orgId);
-    if (org && typeof count === 'number' && count >= org.max_clients) {
-      throw new HttpError(
-        402,
-        `Limite do plano atingido (${org.max_clients} clientes). Faça upgrade.`,
-      );
-    }
-
     const { data, error } = await svc
       .from('clients')
       .insert({
@@ -184,22 +168,6 @@ export class ClientsController {
     await this.clients.ensureClientOfOrg(id, sess.orgId);
 
     const svc = this.supabase.service();
-
-    const { data: org } = await svc
-      .from('organizations')
-      .select('max_ad_accounts')
-      .eq('id', sess.orgId)
-      .single();
-    const { count } = await svc
-      .from('client_ad_accounts')
-      .select('id', { count: 'exact', head: true })
-      .eq('org_id', sess.orgId);
-    if (org && typeof count === 'number' && count >= org.max_ad_accounts) {
-      throw new HttpError(
-        402,
-        `Limite do plano atingido (${org.max_ad_accounts} ad accounts). Faça upgrade.`,
-      );
-    }
 
     const { error } = await svc.from('client_ad_accounts').upsert(
       {
