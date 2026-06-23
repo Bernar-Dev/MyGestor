@@ -51,6 +51,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     const [showInvite, setShowInvite] = useState(false);
     const [inviteEmail, setInviteEmail] = useState("");
     const [inviteUrl, setInviteUrl] = useState("");
+    const [inviteEmailSent, setInviteEmailSent] = useState(false);
+    const [sendingInvite, setSendingInvite] = useState(false);
     const [copiedInvite, setCopiedInvite] = useState(false);
 
     // Analytics state
@@ -220,15 +222,30 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         } catch (e: any) { toast.error(e.message); }
     };
 
+    const openInvite = () => {
+        setInviteEmail(client?.contact_email || "");
+        setInviteUrl("");
+        setInviteEmailSent(false);
+        setCopiedInvite(false);
+        setShowInvite(true);
+    };
+
     const sendInvite = async () => {
         if (!inviteEmail) { toast.error("Email obrigatório"); return; }
+        setSendingInvite(true);
         try {
-            const j = await apiFetch<{ inviteUrl: string }>(`/clients/${id}/invite`, {
+            const j = await apiFetch<{ inviteUrl: string; emailSent: boolean }>(`/clients/${id}/invite`, {
                 method: "POST", body: { email: inviteEmail },
             });
             setInviteUrl(j.inviteUrl);
-            toast.success("Link gerado");
+            setInviteEmailSent(j.emailSent);
+            if (j.emailSent) {
+                toast.success("Convite enviado para " + inviteEmail);
+            } else {
+                toast.success("Link gerado — copie e envie manualmente");
+            }
         } catch (e: any) { toast.error(e.message); }
+        finally { setSendingInvite(false); }
     };
 
     const copyInvite = async () => {
@@ -262,7 +279,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={() => setShowInvite(true)} className="btn-secondary"><Send className="w-4 h-4" /> Convidar</button>
+                    <button onClick={openInvite} className="btn-secondary"><Send className="w-4 h-4" /> Convidar</button>
                     <button onClick={removeClient} className="btn-secondary" style={{ color: "#fca5a5" }}><Trash2 className="w-4 h-4" /></button>
                 </div>
             </header>
@@ -549,35 +566,75 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             {/* Modal: convidar cliente */}
             {showInvite && (
                 <Modal onClose={() => setShowInvite(false)} title="Convidar cliente pro portal">
-                    <p className="muted text-sm mb-3">
-                        Gere um link e envie pro cliente. Ele cria conta e vê apenas as contas atribuídas.
+                    <p className="muted text-sm mb-4">
+                        O cliente receberá um email para criar conta e acessar o portal — somente visualização, sem poder pausar ou alterar campanhas.
                     </p>
-                    <div>
-                        <label className="label">Email do cliente</label>
-                        <input
-                            className="input"
-                            type="email"
-                            value={inviteEmail}
-                            onChange={e => setInviteEmail(e.target.value)}
-                            placeholder="cliente@empresa.com"
-                        />
-                    </div>
-                    <button
-                        onClick={sendInvite}
-                        className="btn-primary w-full justify-center mt-3"
-                        style={{ padding: "0.65rem" }}
-                    >
-                        Gerar link de convite
-                    </button>
-                    {inviteUrl && (
-                        <div className="mt-4 glass p-3" style={{ background: "rgba(52,211,153,0.05)", borderColor: "rgba(52,211,153,0.2)" }}>
-                            <p className="text-xs muted mb-2">Link válido por 7 dias:</p>
-                            <div className="flex gap-2">
-                                <input className="input text-xs" value={inviteUrl} readOnly />
-                                <button onClick={copyInvite} className="btn-secondary" style={{ padding: "0.55rem 0.75rem" }}>
-                                    {copiedInvite ? <Check className="w-4 h-4" style={{ color: "#34d399" }} /> : <Copy className="w-4 h-4" />}
-                                </button>
+
+                    {!inviteUrl ? (
+                        <>
+                            <div>
+                                <label className="label">Email do cliente</label>
+                                <input
+                                    className="input"
+                                    type="email"
+                                    value={inviteEmail}
+                                    onChange={e => setInviteEmail(e.target.value)}
+                                    placeholder="cliente@empresa.com"
+                                    onKeyDown={e => e.key === "Enter" && sendInvite()}
+                                    autoFocus
+                                />
                             </div>
+                            <button
+                                onClick={sendInvite}
+                                disabled={sendingInvite}
+                                className="btn-primary w-full justify-center mt-3"
+                                style={{ padding: "0.65rem" }}
+                            >
+                                {sendingInvite
+                                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
+                                    : <><Send className="w-4 h-4" /> Enviar convite</>
+                                }
+                            </button>
+                        </>
+                    ) : (
+                        <div className="space-y-4">
+                            {/* Status: email enviado ou link manual */}
+                            <div className="flex items-start gap-3 p-3 rounded-lg" style={{
+                                background: inviteEmailSent ? "rgba(52,211,153,0.08)" : "rgba(251,191,36,0.08)",
+                                border: `1px solid ${inviteEmailSent ? "rgba(52,211,153,0.25)" : "rgba(251,191,36,0.25)"}`,
+                            }}>
+                                {inviteEmailSent
+                                    ? <Check className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "#34d399" }} />
+                                    : <Mail className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "#fbbf24" }} />
+                                }
+                                <div>
+                                    <p className="text-sm font-semibold" style={{ color: inviteEmailSent ? "#34d399" : "#fbbf24" }}>
+                                        {inviteEmailSent ? "Email enviado!" : "Envio de email não configurado"}
+                                    </p>
+                                    <p className="text-xs muted mt-0.5">
+                                        {inviteEmailSent
+                                            ? `Convite enviado para ${inviteEmail}. Link válido por 7 dias.`
+                                            : "Configure RESEND_API_KEY no servidor para envio automático. Copie o link abaixo e envie manualmente."
+                                        }
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Link para copiar */}
+                            <div>
+                                <p className="text-xs muted mb-2">Link de acesso (válido 7 dias):</p>
+                                <div className="flex gap-2">
+                                    <input className="input text-xs font-mono" value={inviteUrl} readOnly />
+                                    <button onClick={copyInvite} className="btn-secondary flex-shrink-0" style={{ padding: "0.55rem 0.75rem" }}>
+                                        {copiedInvite ? <Check className="w-4 h-4" style={{ color: "#34d399" }} /> : <Copy className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Reenviar */}
+                            <button onClick={() => { setInviteUrl(""); setInviteEmailSent(false); }} className="btn-secondary w-full justify-center text-sm">
+                                Gerar novo convite
+                            </button>
                         </div>
                     )}
                 </Modal>
