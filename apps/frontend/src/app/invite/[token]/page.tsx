@@ -3,7 +3,7 @@ import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch } from "@/lib/api-client";
-import { Loader2, BarChart3, CircleCheck, AlertCircle } from "lucide-react";
+import { Loader2, BarChart3, AlertCircle, Mail, CircleCheck } from "lucide-react";
 import { toast } from "sonner";
 
 interface InviteInfo {
@@ -21,65 +21,60 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     const [info, setInfo] = useState<InviteInfo | null>(null);
     const [err, setErr] = useState("");
     const [loading, setLoading] = useState(true);
-
-    const [mode, setMode] = useState<"login" | "signup">("signup");
-    const [email, setEmail] = useState("");
-    const [pwd, setPwd] = useState("");
     const [busy, setBusy] = useState(false);
-    const [authed, setAuthed] = useState(false);
-
-    useEffect(() => {
-        (async () => {
-            try {
-                const j = await apiFetch<InviteInfo>(`/invite/${token}`);
-                setInfo(j);
-                setEmail(j.email);
-                const { data: { user } } = await createClient().auth.getUser();
-                if (user && user.email?.toLowerCase() === j.email.toLowerCase()) {
-                    setAuthed(true);
-                    await accept();
-                }
-            } catch (e: any) {
-                setErr(e.message || "Erro");
-            } finally {
-                setLoading(false);
-            }
-        })();
-        /* eslint-disable-next-line */
-    }, [token]);
-
-    const signUp = async () => {
-        if (!pwd) { toast.error("Crie uma senha"); return; }
-        setBusy(true);
-        const { error } = await createClient().auth.signUp({
-            email, password: pwd,
-            options: { emailRedirectTo: `${location.origin}/auth/callback?invite=${token}` },
-        });
-        setBusy(false);
-        if (error) { toast.error(error.message); return; }
-        toast.success("Conta criada — verifique seu email (ou clique 'já tenho conta' se já confirmou).");
-    };
-
-    const login = async () => {
-        if (!pwd) { toast.error("Digite a senha"); return; }
-        setBusy(true);
-        const { error } = await createClient().auth.signInWithPassword({ email, password: pwd });
-        if (error) { toast.error(error.message); setBusy(false); return; }
-        await accept();
-        setBusy(false);
-    };
+    const [sent, setSent] = useState(false);
 
     const accept = async () => {
         try {
             const j = await apiFetch<{ redirect: string }>(`/invite/${token}`, { method: "POST" });
-            toast.success("Convite aceito!");
             router.push(j.redirect || "/portal");
         } catch (e: any) {
             toast.error(e.message);
         }
     };
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin muted" /></div>;
+    useEffect(() => {
+        (async () => {
+            try {
+                const j = await apiFetch<InviteInfo>(`/invite/${token}`);
+                setInfo(j);
+
+                // Se já está logado com o email certo, aceita direto
+                const { data: { user } } = await createClient().auth.getUser();
+                if (user && user.email?.toLowerCase() === j.email.toLowerCase()) {
+                    await accept();
+                    return;
+                }
+            } catch (e: any) {
+                setErr(e.message || "Convite inválido ou expirado");
+            } finally {
+                setLoading(false);
+            }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [token]);
+
+    const sendMagicLink = async () => {
+        if (!info) return;
+        setBusy(true);
+        const { error } = await createClient().auth.signInWithOtp({
+            email: info.email,
+            options: {
+                shouldCreateUser: true,
+                emailRedirectTo: `${location.origin}/auth/callback?invite=${token}`,
+            },
+        });
+        setBusy(false);
+        if (error) { toast.error(error.message); return; }
+        setSent(true);
+    };
+
+    if (loading) return (
+        <div className="min-h-screen flex items-center justify-center">
+            <Loader2 className="w-6 h-6 animate-spin muted" />
+        </div>
+    );
+
     if (err) return (
         <div className="min-h-screen flex items-center justify-center p-4">
             <div className="glass p-6 max-w-md text-center">
@@ -88,6 +83,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
             </div>
         </div>
     );
+
     if (!info) return null;
 
     const color = info.org_primary_color || "#7c3aed";
@@ -95,46 +91,61 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     return (
         <main className="min-h-screen flex items-center justify-center p-4">
             <div className="glass max-w-md w-full p-7">
+                {/* Header */}
                 <div className="flex items-center gap-3 mb-5">
                     {info.org_logo_url
                         ? <img src={info.org_logo_url} alt="" className="w-10 h-10 rounded-lg object-cover" />
-                        : <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: color }}><BarChart3 className="w-5 h-5 text-white" /></div>}
+                        : <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: color }}>
+                            <BarChart3 className="w-5 h-5 text-white" />
+                          </div>}
                     <div>
                         <p className="text-xs muted">Você foi convidado por</p>
                         <h1 className="font-bold">{info.org_name}</h1>
                     </div>
                 </div>
 
-                <p className="text-sm mb-5">
-                    Olá <strong>{info.client_name}</strong>! Crie sua conta pra acompanhar suas campanhas Meta no portal da agência.
+                <p className="text-sm mb-6">
+                    Olá <strong>{info.client_name}</strong>! Acesse o portal para acompanhar suas campanhas Meta em tempo real.
                 </p>
 
-                {authed ? (
-                    <div className="text-center">
-                        <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" /> <p className="text-sm muted">Entrando no portal...</p>
+                {sent ? (
+                    /* ── Link enviado ── */
+                    <div className="text-center space-y-3">
+                        <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto" style={{ background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)" }}>
+                            <Mail className="w-7 h-7" style={{ color: "#34d399" }} />
+                        </div>
+                        <h2 className="font-bold">Verifique seu email</h2>
+                        <p className="text-sm muted">
+                            Enviamos um link de acesso para <strong>{info.email}</strong>.<br />
+                            Clique no link do email para entrar no portal.
+                        </p>
+                        <p className="text-xs muted">Não chegou? Verifique o spam ou</p>
+                        <button onClick={() => setSent(false)} className="text-xs underline muted">
+                            tente novamente
+                        </button>
                     </div>
                 ) : (
-                    <>
-                        <div className="flex gap-1 mb-4">
-                            <button onClick={() => setMode("signup")} className={`btn-secondary flex-1 justify-center ${mode === "signup" ? "" : "opacity-60"}`}>Criar conta</button>
-                            <button onClick={() => setMode("login")} className={`btn-secondary flex-1 justify-center ${mode === "login" ? "" : "opacity-60"}`}>Já tenho</button>
+                    /* ── Botão de acesso ── */
+                    <div className="space-y-3">
+                        <div className="p-3 rounded-lg text-sm" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                            <p className="text-xs muted mb-0.5">Acesso para</p>
+                            <p className="font-mono font-semibold">{info.email}</p>
                         </div>
-
-                        <div className="space-y-3">
-                            <div>
-                                <label className="label">Email</label>
-                                <input className="input" value={email} readOnly />
-                            </div>
-                            <div>
-                                <label className="label">{mode === "signup" ? "Crie uma senha" : "Sua senha"}</label>
-                                <input type="password" className="input" value={pwd} onChange={e => setPwd(e.target.value)} />
-                            </div>
-                            <button onClick={mode === "signup" ? signUp : login} disabled={busy} className="btn-primary w-full justify-center" style={{ padding: "0.7rem" }}>
-                                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CircleCheck className="w-4 h-4" />}
-                                {mode === "signup" ? "Criar conta e entrar" : "Entrar e aceitar"}
-                            </button>
-                        </div>
-                    </>
+                        <button
+                            onClick={sendMagicLink}
+                            disabled={busy}
+                            className="btn-primary w-full justify-center"
+                            style={{ padding: "0.75rem", background: color, borderColor: color }}
+                        >
+                            {busy
+                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
+                                : <><CircleCheck className="w-4 h-4" /> Receber link de acesso</>
+                            }
+                        </button>
+                        <p className="text-xs muted text-center">
+                            Vamos enviar um link para o seu email. Sem necessidade de senha.
+                        </p>
+                    </div>
                 )}
             </div>
         </main>
