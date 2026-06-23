@@ -8,7 +8,7 @@ import {
     MousePointerClick, Target, ChevronLeft,
     RefreshCw, Search, Loader2, AlertCircle, Eye, Menu, X,
     Building2, Layers, Hash, Brain, Wallet, Activity, Filter,
-    Settings, LogOut, ChevronDown,
+    Settings, LogOut, ChevronDown, Send,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -798,6 +798,14 @@ export default function MeuGestorDashboard() {
                             <RefreshCw style={{ width: 13, height: 13, animation: loading ? "spin 1s linear infinite" : "none" }} />
                             {loading ? "Atualizando..." : "Atualizar"}
                         </button>
+                        {selectedClientId && (
+                            <a href={`/dashboard/clients/${selectedClientId}?invite=1`}
+                                className="g-btn-primary"
+                                style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.5rem 0.75rem", fontSize: "0.75rem", textDecoration: "none" }}>
+                                <Send style={{ width: 13, height: 13 }} />
+                                Convidar
+                            </a>
+                        )}
                     </div>
                 </header>
 
