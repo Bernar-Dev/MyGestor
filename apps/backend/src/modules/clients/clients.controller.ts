@@ -311,82 +311,15 @@ export class ClientsController {
       `${req.protocol}://${req.get('host')}`;
     const inviteUrl = `${origin}/invite/${token}`;
 
-    // Envia email via Resend se a chave estiver configurada
+    // Envia convite via Supabase Auth (service_role) — sem serviço externo
     let emailSent = false;
-    const resendKey = process.env.RESEND_API_KEY;
-    if (resendKey) {
-      const { data: org } = await svc
-        .from('organizations')
-        .select('name, logo_url, primary_color')
-        .eq('id', sess.orgId)
-        .single();
-
-      const orgName = org?.name ?? 'sua agência';
-      const color = org?.primary_color ?? '#7c3aed';
-
-      try {
-        const emailRes = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${resendKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: process.env.RESEND_FROM ?? 'noreply@meugestor.app',
-            to: body.email,
-            subject: `${orgName} convidou você para ver suas campanhas`,
-            html: buildInviteEmail({ clientName: client.name, orgName, color, inviteUrl }),
-          }),
-        });
-        emailSent = emailRes.ok;
-      } catch { /* ignora falha de email; link ainda retorna */ }
-    }
+    try {
+      const { error: invErr } = await svc.auth.admin.inviteUserByEmail(body.email, {
+        redirectTo: `${origin}/auth/callback?invite=${token}`,
+      });
+      emailSent = !invErr;
+    } catch { /* ignora; link continua válido para envio manual */ }
 
     return { ok: true, inviteUrl, expiresAt, emailSent };
   }
-}
-
-function buildInviteEmail(opts: {
-  clientName: string;
-  orgName: string;
-  color: string;
-  inviteUrl: string;
-}): string {
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#0d0f1f;font-family:Inter,Arial,sans-serif;color:#e2e8f0;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;">
-    <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:#161929;border:1px solid rgba(255,255,255,0.08);border-radius:16px;overflow:hidden;">
-        <!-- Header -->
-        <tr><td style="background:${opts.color};padding:24px 32px;">
-          <p style="margin:0;font-size:20px;font-weight:700;color:#fff;">${opts.orgName}</p>
-          <p style="margin:4px 0 0;font-size:12px;color:rgba(255,255,255,0.7);">Portal de relatórios de campanhas</p>
-        </td></tr>
-        <!-- Body -->
-        <tr><td style="padding:32px;">
-          <h2 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#fff;">Olá, ${opts.clientName}!</h2>
-          <p style="margin:0 0 20px;font-size:15px;color:rgba(255,255,255,0.65);line-height:1.6;">
-            <strong>${opts.orgName}</strong> convidou você para acessar o portal de acompanhamento das suas campanhas Meta Ads.
-            Você poderá visualizar seus resultados em tempo real — sem precisar entrar no Gerenciador de Anúncios.
-          </p>
-          <table cellpadding="0" cellspacing="0"><tr><td>
-            <a href="${opts.inviteUrl}" style="display:inline-block;background:${opts.color};color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:14px 28px;border-radius:10px;">
-              Criar minha conta e acessar
-            </a>
-          </td></tr></table>
-          <p style="margin:20px 0 0;font-size:12px;color:rgba(255,255,255,0.35);">
-            Este link expira em 7 dias. Se você não esperava este convite, pode ignorar este email.
-          </p>
-        </td></tr>
-        <!-- Footer -->
-        <tr><td style="padding:16px 32px;border-top:1px solid rgba(255,255,255,0.06);">
-          <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.25);">Meu Gestor · Plataforma de analytics Meta Ads</p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
 }
