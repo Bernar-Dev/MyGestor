@@ -35,12 +35,22 @@ export class InvitesController {
       .eq('id', data.org_id)
       .single();
 
+    // Verifica se o email já tem conta cadastrada
+    let userExists = false;
+    const { data: usersPage } = await svc.auth.admin.listUsers({ perPage: 1000 });
+    if (usersPage?.users) {
+      userExists = usersPage.users.some(
+        (u) => u.email?.toLowerCase() === data.email.toLowerCase(),
+      );
+    }
+
     return {
       email: data.email,
       client_name: client?.name,
       org_name: org?.name,
       org_logo_url: org?.logo_url,
       org_primary_color: org?.primary_color,
+      user_exists: userExists,
     };
   }
 
@@ -67,27 +77,23 @@ export class InvitesController {
       throw new HttpError(410, 'Convite expirado');
     }
 
+    // Verifica se usuário já existe — deve usar o fluxo de login
+    const { data: usersPage } = await svc.auth.admin.listUsers({ perPage: 1000 });
+    const existing = usersPage?.users?.find(
+      (u) => u.email?.toLowerCase() === invite.email.toLowerCase(),
+    );
+    if (existing) {
+      throw new HttpError(409, 'Você já tem uma conta com este email. Use sua senha para entrar.');
+    }
+
     // Cria usuário já confirmado (sem precisar de email de confirmação)
-    let userId: string;
     const { data: created, error: createErr } = await svc.auth.admin.createUser({
       email: invite.email,
       password: body.password,
       email_confirm: true,
     });
-
-    if (createErr) {
-      // Usuário já existe — apenas atualiza a senha e confirma
-      const { data: existing } = await svc.auth.admin.listUsers();
-      const found = existing?.users?.find(u => u.email?.toLowerCase() === invite.email.toLowerCase());
-      if (!found) throw new HttpError(500, createErr.message);
-      await svc.auth.admin.updateUserById(found.id, {
-        password: body.password,
-        email_confirm: true,
-      });
-      userId = found.id;
-    } else {
-      userId = created.user.id;
-    }
+    if (createErr) throw new HttpError(500, createErr.message);
+    const userId = created.user.id;
 
     // Aceita o convite
     await svc.from('clients').update({
