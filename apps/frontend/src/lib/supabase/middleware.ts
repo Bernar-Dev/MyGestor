@@ -71,6 +71,14 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
     }
 
+    // Logado tentando acessar login → manda pro dashboard (que roteia cliente/agência).
+    if (path.startsWith("/login")) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard";
+        url.search = "";
+        return NextResponse.redirect(url);
+    }
+
     // Logado. Não redirecionamos cliente↔agência aqui pra evitar query de DB no middleware;
     // as APIs e páginas resolvem o papel correto via resolveSession() e direcionam.
     return response;
