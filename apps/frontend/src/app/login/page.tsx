@@ -1,9 +1,14 @@
 "use client";
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { BarChart3, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+
+const AUTH_ERROR_MSGS: Record<string, string> = {
+    otp_expired: "O link de redefinição expirou ou já foi usado. Solicite um novo.",
+    access_denied: "Acesso negado. Solicite um novo link.",
+};
 
 function LoginContent() {
     const params = useSearchParams();
@@ -15,12 +20,23 @@ function LoginContent() {
     const [err, setErr] = useState("");
     const [forgotMode, setForgotMode] = useState(false);
     const [resetSent, setResetSent] = useState(false);
+    const [hashError, setHashError] = useState("");
+
+    // Supabase às vezes manda erros no hash (#error_code=...) em vez da query string
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const hash = window.location.hash.slice(1);
+        if (!hash) return;
+        const p = new URLSearchParams(hash);
+        const code = p.get("error_code") ?? p.get("error");
+        if (code) {
+            setHashError(AUTH_ERROR_MSGS[code] ?? "Link inválido ou expirado. Solicite um novo.");
+            window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        }
+    }, []);
 
     const authError = params.get("auth_error");
-    const authErrorMsg: Record<string, string> = {
-        otp_expired: "O link de redefinição expirou ou já foi usado. Solicite um novo.",
-        access_denied: "Acesso negado. Solicite um novo link.",
-    };
+    const authErrorMsg = authError ? (AUTH_ERROR_MSGS[authError] ?? "Link inválido ou expirado. Solicite um novo.") : "";
 
     const sendReset = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -81,10 +97,10 @@ function LoginContent() {
     return (
         <main className="min-h-screen flex items-center justify-center px-4">
             <div className="glass w-full max-w-md p-7">
-                {authError && (
+                {(authErrorMsg || hashError) && (
                     <div className="flex items-start gap-2 text-sm mb-5 p-3 rounded-lg" style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", color: "#fbbf24" }}>
                         <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                        <span>{authErrorMsg[authError] ?? "Link inválido ou expirado. Solicite um novo."}</span>
+                        <span>{authErrorMsg || hashError}</span>
                     </div>
                 )}
 
