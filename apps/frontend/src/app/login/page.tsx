@@ -13,6 +13,20 @@ function LoginContent() {
     const [pwd, setPwd] = useState("");
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState("");
+    const [forgotMode, setForgotMode] = useState(false);
+    const [resetSent, setResetSent] = useState(false);
+
+    const sendReset = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!email) { setErr("Digite seu email"); return; }
+        setBusy(true); setErr("");
+        const { error } = await createClient().auth.resetPasswordForEmail(email, {
+            redirectTo: `${location.origin}/auth/callback?next=/reset-password`,
+        });
+        setBusy(false);
+        if (error) { setErr(error.message); return; }
+        setResetSent(true);
+    };
 
     const signInGoogle = async () => {
         setBusy(true); setErr("");
@@ -91,31 +105,70 @@ function LoginContent() {
                     <div className="divider flex-1" />
                 </div>
 
-                <form onSubmit={signInEmail} className="space-y-3">
-                    <div>
-                        <label className="label">Email</label>
-                        <input type="email" className="input" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="email" />
-                    </div>
-                    <div>
-                        <label className="label">Senha</label>
-                        <input type="password" className="input" value={pwd} onChange={e => setPwd(e.target.value)} autoComplete="current-password" />
-                    </div>
-
-                    {err && (
-                        <div className="flex items-start gap-2 text-sm" style={{ color: "#fca5a5" }}>
-                            <AlertCircle className="w-4 h-4 mt-0.5" />
-                            <span>{err}</span>
+                {forgotMode ? (
+                    resetSent ? (
+                        <div className="text-center space-y-3 py-2">
+                            <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto" style={{ background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)" }}>
+                                <AlertCircle className="w-6 h-6" style={{ color: "#34d399" }} />
+                            </div>
+                            <p className="font-semibold text-sm">Verifique seu email</p>
+                            <p className="text-xs muted">Enviamos um link para <strong>{email}</strong>. Clique nele para criar uma nova senha.</p>
+                            <button onClick={() => { setForgotMode(false); setResetSent(false); }} className="text-xs underline muted">Voltar ao login</button>
                         </div>
-                    )}
+                    ) : (
+                        <form onSubmit={sendReset} className="space-y-3">
+                            <p className="text-sm muted">Digite seu email e enviaremos um link para redefinir sua senha.</p>
+                            <div>
+                                <label className="label">Email</label>
+                                <input type="email" className="input" value={email} onChange={e => setEmail(e.target.value)} required autoFocus autoComplete="email" />
+                            </div>
+                            {err && (
+                                <div className="flex items-start gap-2 text-sm" style={{ color: "#fca5a5" }}>
+                                    <AlertCircle className="w-4 h-4 mt-0.5" />
+                                    <span>{err}</span>
+                                </div>
+                            )}
+                            <button type="submit" disabled={busy} className="btn-primary w-full justify-center" style={{ padding: "0.7rem" }}>
+                                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                                Enviar link de redefinição
+                            </button>
+                            <button type="button" onClick={() => { setForgotMode(false); setErr(""); }} className="btn-secondary w-full justify-center text-sm">
+                                Voltar
+                            </button>
+                        </form>
+                    )
+                ) : (
+                    <form onSubmit={signInEmail} className="space-y-3">
+                        <div>
+                            <label className="label">Email</label>
+                            <input type="email" className="input" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="email" />
+                        </div>
+                        <div>
+                            <div className="flex items-center justify-between mb-1">
+                                <label className="label" style={{ margin: 0 }}>Senha</label>
+                                <button type="button" onClick={() => { setForgotMode(true); setErr(""); }} className="text-xs muted underline">
+                                    Esqueci minha senha
+                                </button>
+                            </div>
+                            <input type="password" className="input" value={pwd} onChange={e => setPwd(e.target.value)} autoComplete="current-password" />
+                        </div>
 
-                    <button type="submit" disabled={busy} className="btn-primary w-full justify-center" style={{ padding: "0.7rem" }}>
-                        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                        Entrar com senha
-                    </button>
-                    <button type="button" onClick={signUp} disabled={busy} className="btn-secondary w-full justify-center text-sm">
-                        Criar conta nova
-                    </button>
-                </form>
+                        {err && (
+                            <div className="flex items-start gap-2 text-sm" style={{ color: "#fca5a5" }}>
+                                <AlertCircle className="w-4 h-4 mt-0.5" />
+                                <span>{err}</span>
+                            </div>
+                        )}
+
+                        <button type="submit" disabled={busy} className="btn-primary w-full justify-center" style={{ padding: "0.7rem" }}>
+                            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                            Entrar com senha
+                        </button>
+                        <button type="button" onClick={signUp} disabled={busy} className="btn-secondary w-full justify-center text-sm">
+                            Criar conta nova
+                        </button>
+                    </form>
+                )}
             </div>
         </main>
     );
