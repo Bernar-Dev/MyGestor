@@ -62,6 +62,11 @@ interface PeriodMeta { preset?: string; range?: { since: string; until: string }
 // MAIN
 // ─────────────────────────────────────────────────────────────
 export default function MeuGestorDashboard() {
+    const handleLogout = async () => {
+        await createClient().auth.signOut();
+        window.location.href = "/login";
+    };
+
     // Navegação
     const [currentPage, setCurrentPage] = useState("dashboard");
     const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
@@ -719,7 +724,7 @@ export default function MeuGestorDashboard() {
                         <Search style={{ width: 12, height: 12 }} />
                         {sidebarOpen && <><span>Buscar</span><kbd style={{ marginLeft: "auto", fontSize: "0.6rem", padding: "0.1rem 0.3rem", background: "rgba(255,255,255,0.06)", borderRadius: 3, color: "rgba(255,255,255,0.4)" }}>⌘K</kbd></>}
                     </button>
-                    {sidebarOpen && (
+                    {sidebarOpen ? (
                         <div style={{ display: "flex", gap: "0.35rem" }}>
                             <Link href="/dashboard/clients" className="g-btn-secondary" style={{ flex: 1, display: "inline-flex", alignItems: "center", gap: 5, padding: "0.45rem", fontSize: "0.7rem", justifyContent: "center" }} title="Gerenciar clientes">
                                 <Users style={{ width: 12, height: 12 }} /> Gerenciar
@@ -727,7 +732,14 @@ export default function MeuGestorDashboard() {
                             <Link href="/dashboard/settings" className="g-btn-secondary" style={{ display: "inline-flex", alignItems: "center", padding: "0.45rem", fontSize: "0.7rem" }} title="Configurações">
                                 <Settings style={{ width: 12, height: 12 }} />
                             </Link>
+                            <button onClick={handleLogout} className="g-btn-secondary" style={{ display: "inline-flex", alignItems: "center", padding: "0.45rem", fontSize: "0.7rem", color: "#fca5a5" }} title="Sair">
+                                <LogOut style={{ width: 12, height: 12 }} />
+                            </button>
                         </div>
+                    ) : (
+                        <button onClick={handleLogout} className="g-btn-secondary" style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0.5rem", color: "#fca5a5" }} title="Sair">
+                            <LogOut style={{ width: 12, height: 12 }} />
+                        </button>
                     )}
                 </div>
             </aside>
