@@ -620,7 +620,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                                     <p className="text-xs muted mt-0.5">
                                         {inviteEmailSent
                                             ? `Convite enviado para ${inviteEmail}. Link válido por 7 dias.`
-                                            : "Configure RESEND_API_KEY no servidor para envio automático. Copie o link abaixo e envie manualmente."
+                                            : "Não foi possível enviar o email automaticamente. Copie o link abaixo e envie manualmente."
                                         }
                                     </p>
                                 </div>
