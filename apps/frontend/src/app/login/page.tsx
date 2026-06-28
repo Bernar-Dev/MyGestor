@@ -16,6 +16,12 @@ function LoginContent() {
     const [forgotMode, setForgotMode] = useState(false);
     const [resetSent, setResetSent] = useState(false);
 
+    const authError = params.get("auth_error");
+    const authErrorMsg: Record<string, string> = {
+        otp_expired: "O link de redefinição expirou ou já foi usado. Solicite um novo.",
+        access_denied: "Acesso negado. Solicite um novo link.",
+    };
+
     const sendReset = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!email) { setErr("Digite seu email"); return; }
@@ -75,6 +81,13 @@ function LoginContent() {
     return (
         <main className="min-h-screen flex items-center justify-center px-4">
             <div className="glass w-full max-w-md p-7">
+                {authError && (
+                    <div className="flex items-start gap-2 text-sm mb-5 p-3 rounded-lg" style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", color: "#fbbf24" }}>
+                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>{authErrorMsg[authError] ?? "Link inválido ou expirado. Solicite um novo."}</span>
+                    </div>
+                )}
+
                 <div className="flex items-center gap-3 mb-6">
                     <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #4c6ef5 0%, #7c3aed 50%, #f472b6 100%)" }}>
                         <BarChart3 className="w-5 h-5 text-white" />

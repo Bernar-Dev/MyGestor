@@ -21,6 +21,17 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.next({ request });
     }
 
+    // Supabase redireciona erros de auth (link expirado, OTP inválido) para a
+    // raiz do site com ?error=... na query string. Captura aqui e manda pro login.
+    if (request.nextUrl.pathname === "/" && request.nextUrl.searchParams.has("error")) {
+        const errorCode = request.nextUrl.searchParams.get("error_code") ?? "auth_error";
+        const url = request.nextUrl.clone();
+        url.pathname = "/login";
+        url.search = "";
+        url.searchParams.set("auth_error", errorCode);
+        return NextResponse.redirect(url);
+    }
+
     // Guard: se as env vars não estiverem disponíveis no bundle, passa sem auth
     // (evita MIDDLEWARE_INVOCATION_FAILED quando NEXT_PUBLIC_* está undefined)
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
