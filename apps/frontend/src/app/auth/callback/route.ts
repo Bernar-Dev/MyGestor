@@ -19,6 +19,11 @@ export async function GET(request: NextRequest) {
 
     if (code) {
         const supabase = await createClient();
+        // Se for fluxo de reset de senha, desloga sessão atual antes de estabelecer
+        // a sessão de recovery — evita trocar a senha do usuário logado por engano.
+        if (next === "/reset-password") {
+            await supabase.auth.signOut();
+        }
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (error) return NextResponse.redirect(`${origin}/login?error=auth_callback`);
     }
