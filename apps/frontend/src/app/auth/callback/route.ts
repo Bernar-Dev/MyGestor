@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (invite) return NextResponse.redirect(`${origin}/invite/${invite}`);
+    if (next === "/reset-password") return NextResponse.redirect(`${origin}/reset-password`);
 
     const sess = await resolveSession();
     if (!sess) return NextResponse.redirect(`${origin}/login`);
