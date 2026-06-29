@@ -35,13 +35,15 @@ export class InvitesController {
       .eq('id', data.org_id)
       .single();
 
-    // Verifica se o email já tem conta cadastrada e qual o papel
+    // Verifica se o email já tem conta confirmada (ignora usuários em estado "convidado"
+    // criados pelo inviteUserByEmail, que têm email_confirmed_at = null)
     let userExists = false;
     let userIsGestor = false;
     const { data: usersPage } = await svc.auth.admin.listUsers({ perPage: 1000 });
     if (usersPage?.users) {
       const found = usersPage.users.find(
-        (u: { email?: string | null }) => u.email?.toLowerCase() === data.email.toLowerCase(),
+        (u: { email?: string | null; email_confirmed_at?: string | null }) =>
+          u.email?.toLowerCase() === data.email.toLowerCase() && !!u.email_confirmed_at,
       );
       if (found) {
         userExists = true;
@@ -88,23 +90,37 @@ export class InvitesController {
       throw new HttpError(410, 'Convite expirado');
     }
 
-    // Verifica se usuário já existe — deve usar o fluxo de login
+    // Verifica se usuário já tem conta confirmada (ignora pendentes do inviteUserByEmail)
     const { data: usersPage } = await svc.auth.admin.listUsers({ perPage: 1000 });
     const existing = usersPage?.users?.find(
-      (u: { email?: string | null }) => u.email?.toLowerCase() === invite.email.toLowerCase(),
+      (u: { email?: string | null; email_confirmed_at?: string | null }) =>
+        u.email?.toLowerCase() === invite.email.toLowerCase() && !!u.email_confirmed_at,
     );
     if (existing) {
       throw new HttpError(409, 'Você já tem uma conta com este email. Use sua senha para entrar.');
     }
 
-    // Cria usuário já confirmado (sem precisar de email de confirmação)
-    const { data: created, error: createErr } = await svc.auth.admin.createUser({
-      email: invite.email,
-      password: body.password,
-      email_confirm: true,
-    });
-    if (createErr) throw new HttpError(500, createErr.message);
-    const userId = created.user.id;
+    // Usuário pode existir em estado "convidado" (sem senha) — atualiza ou cria
+    const pending = usersPage?.users?.find(
+      (u: { email?: string | null }) => u.email?.toLowerCase() === invite.email.toLowerCase(),
+    );
+
+    let userId: string;
+    if (pending) {
+      await svc.auth.admin.updateUserById(pending.id, {
+        password: body.password,
+        email_confirm: true,
+      });
+      userId = pending.id;
+    } else {
+      const { data: created, error: createErr } = await svc.auth.admin.createUser({
+        email: invite.email,
+        password: body.password,
+        email_confirm: true,
+      });
+      if (createErr) throw new HttpError(500, createErr.message);
+      userId = created.user.id;
+    }
 
     // Aceita o convite
     await svc.from('clients').update({

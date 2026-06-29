@@ -247,10 +247,11 @@ export class ClientsController {
       .maybeSingle();
     if (!client) throw new HttpError(404, 'Cliente não encontrado');
 
-    // Bloqueia convite se o email já pertence a uma conta de gestor
+    // Bloqueia convite se o email já pertence a uma conta de gestor confirmada
     const { data: usersPage } = await svc.auth.admin.listUsers({ perPage: 1000 });
     const existingUser = usersPage?.users?.find(
-      (u: { email?: string | null }) => u.email?.toLowerCase() === body.email.toLowerCase(),
+      (u: { email?: string | null; email_confirmed_at?: string | null }) =>
+        u.email?.toLowerCase() === body.email.toLowerCase() && !!u.email_confirmed_at,
     );
     if (existingUser) {
       const { data: existingProfile } = await svc
