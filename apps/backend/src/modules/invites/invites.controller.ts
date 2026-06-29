@@ -40,7 +40,7 @@ export class InvitesController {
     const { data: usersPage } = await svc.auth.admin.listUsers({ perPage: 1000 });
     if (usersPage?.users) {
       userExists = usersPage.users.some(
-        (u) => u.email?.toLowerCase() === data.email.toLowerCase(),
+        (u: { email?: string | null }) => u.email?.toLowerCase() === data.email.toLowerCase(),
       );
     }
 
@@ -80,7 +80,7 @@ export class InvitesController {
     // Verifica se usuário já existe — deve usar o fluxo de login
     const { data: usersPage } = await svc.auth.admin.listUsers({ perPage: 1000 });
     const existing = usersPage?.users?.find(
-      (u) => u.email?.toLowerCase() === invite.email.toLowerCase(),
+      (u: { email?: string | null }) => u.email?.toLowerCase() === invite.email.toLowerCase(),
     );
     if (existing) {
       throw new HttpError(409, 'Você já tem uma conta com este email. Use sua senha para entrar.');
