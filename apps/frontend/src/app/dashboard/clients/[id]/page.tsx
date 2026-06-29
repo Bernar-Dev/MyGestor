@@ -3,7 +3,7 @@ import { useEffect, useState, use, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-    ArrowLeft, Loader2, Plus, Trash2, Send, Copy, Check, Save, Mail, Phone, Building, X,
+    ArrowLeft, Loader2, Plus, Trash2, Send, Save, Mail, Phone, Building, X,
     BarChart3, Users, Settings2, RefreshCw, AlertCircle, UserCheck, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -59,12 +59,6 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     const [dirtyAccounts, setDirtyAccounts] = useState<Set<string>>(new Set());
     const [savingPerm, setSavingPerm] = useState<string | null>(null);
     const [showAssign, setShowAssign] = useState(false);
-    const [showInvite, setShowInvite] = useState(false);
-    const [inviteEmail, setInviteEmail] = useState("");
-    const [inviteUrl, setInviteUrl] = useState("");
-    const [inviteEmailSent, setInviteEmailSent] = useState(false);
-    const [sendingInvite, setSendingInvite] = useState(false);
-    const [copiedInvite, setCopiedInvite] = useState(false);
 
     // Analytics state
     const [period, setPeriod] = useState<DateRangeValue>(() => load("client-analytics:period", { preset: "last_7d" }));
@@ -318,37 +312,6 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         finally { setSavingPerm(null); }
     };
 
-    const openInvite = () => {
-        setInviteEmail(client?.contact_email || "");
-        setInviteUrl("");
-        setInviteEmailSent(false);
-        setCopiedInvite(false);
-        setShowInvite(true);
-    };
-
-    const sendInvite = async () => {
-        if (!inviteEmail) { toast.error("Email obrigatório"); return; }
-        setSendingInvite(true);
-        try {
-            const j = await apiFetch<{ inviteUrl: string; emailSent: boolean }>(`/clients/${id}/invite`, {
-                method: "POST", body: { email: inviteEmail },
-            });
-            setInviteUrl(j.inviteUrl);
-            setInviteEmailSent(j.emailSent);
-            if (j.emailSent) {
-                toast.success("Convite enviado para " + inviteEmail);
-            } else {
-                toast.success("Link gerado — copie e envie manualmente");
-            }
-        } catch (e: any) { toast.error(e.message); }
-        finally { setSendingInvite(false); }
-    };
-
-    const copyInvite = async () => {
-        await navigator.clipboard.writeText(inviteUrl);
-        setCopiedInvite(true);
-        setTimeout(() => setCopiedInvite(false), 2000);
-    };
 
     if (loading || !client) {
         return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin muted" /></div>;
@@ -375,7 +338,6 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={openInvite} className="btn-secondary"><Send className="w-4 h-4" /> Convidar</button>
                     <button onClick={removeClient} className="btn-secondary" style={{ color: "#fca5a5" }}><Trash2 className="w-4 h-4" /></button>
                 </div>
             </header>
@@ -441,7 +403,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                             Portal:{" "}
                             {client.portal_enabled
                                 ? <span style={{ color: "#34d399" }}>ativo (cliente aceitou convite)</span>
-                                : <span>pendente — gere um convite no botão acima</span>}
+                                : <span>pendente</span>}
                         </p>
                     </section>
                 )}
@@ -473,12 +435,6 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                                     >
                                         <RefreshCw className={`w-3 h-3 ${analyticsLoading ? "animate-spin" : ""}`} />
                                     </button>
-                                    <div style={{ marginLeft: "auto" }}>
-                                        <button onClick={openInvite} className="btn-secondary text-xs" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
-                                            <Send className="w-3 h-3" />
-                                            {client.portal_enabled ? "Reenviar acesso" : "Convidar cliente"}
-                                        </button>
-                                    </div>
                                 </div>
 
                                 {analyticsError && (
@@ -814,82 +770,6 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 </Modal>
             )}
 
-            {/* Modal: convidar cliente */}
-            {showInvite && (
-                <Modal onClose={() => setShowInvite(false)} title="Convidar cliente pro portal">
-                    <p className="muted text-sm mb-4">
-                        O cliente receberá um email para criar conta e acessar o portal — somente visualização, sem poder pausar ou alterar campanhas.
-                    </p>
-
-                    {!inviteUrl ? (
-                        <>
-                            <div>
-                                <label className="label">Email do cliente</label>
-                                <input
-                                    className="input"
-                                    type="email"
-                                    value={inviteEmail}
-                                    onChange={e => setInviteEmail(e.target.value)}
-                                    placeholder="cliente@empresa.com"
-                                    onKeyDown={e => e.key === "Enter" && sendInvite()}
-                                    autoFocus
-                                />
-                            </div>
-                            <button
-                                onClick={sendInvite}
-                                disabled={sendingInvite}
-                                className="btn-primary w-full justify-center mt-3"
-                                style={{ padding: "0.65rem" }}
-                            >
-                                {sendingInvite
-                                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
-                                    : <><Send className="w-4 h-4" /> Enviar convite</>
-                                }
-                            </button>
-                        </>
-                    ) : (
-                        <div className="space-y-4">
-                            {/* Status: email enviado ou link manual */}
-                            <div className="flex items-start gap-3 p-3 rounded-lg" style={{
-                                background: inviteEmailSent ? "rgba(52,211,153,0.08)" : "rgba(251,191,36,0.08)",
-                                border: `1px solid ${inviteEmailSent ? "rgba(52,211,153,0.25)" : "rgba(251,191,36,0.25)"}`,
-                            }}>
-                                {inviteEmailSent
-                                    ? <Check className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "#34d399" }} />
-                                    : <Mail className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "#fbbf24" }} />
-                                }
-                                <div>
-                                    <p className="text-sm font-semibold" style={{ color: inviteEmailSent ? "#34d399" : "#fbbf24" }}>
-                                        {inviteEmailSent ? "Email enviado!" : "Envio de email não configurado"}
-                                    </p>
-                                    <p className="text-xs muted mt-0.5">
-                                        {inviteEmailSent
-                                            ? `Convite enviado para ${inviteEmail}. Link válido por 7 dias.`
-                                            : "Não foi possível enviar o email automaticamente. Copie o link abaixo e envie manualmente."
-                                        }
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Link para copiar */}
-                            <div>
-                                <p className="text-xs muted mb-2">Link de acesso (válido 7 dias):</p>
-                                <div className="flex gap-2">
-                                    <input className="input text-xs font-mono" value={inviteUrl} readOnly />
-                                    <button onClick={copyInvite} className="btn-secondary flex-shrink-0" style={{ padding: "0.55rem 0.75rem" }}>
-                                        {copiedInvite ? <Check className="w-4 h-4" style={{ color: "#34d399" }} /> : <Copy className="w-4 h-4" />}
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Reenviar */}
-                            <button onClick={() => { setInviteUrl(""); setInviteEmailSent(false); }} className="btn-secondary w-full justify-center text-sm">
-                                Gerar novo convite
-                            </button>
-                        </div>
-                    )}
-                </Modal>
-            )}
         </div>
     );
 }
