@@ -101,22 +101,26 @@ export class MetaController {
     return { ok: true };
   }
 
-  /** GET /api/meta/access-token — devolve token decriptado; auto-renova se expira em < 7 dias */
+  /** GET /api/meta/access-token — devolve token decriptado (agência ou cliente do portal) */
   @Get('access-token')
   async getAccessToken(@CurrentSession() session: Session) {
-    const agency = this.org.requireAgency(session);
-    const token = await this.store.loadToken(agency.orgId);
+    // Aceita tanto gestor quanto convidado — ambos têm orgId resolvido
+    if (!('orgId' in session)) {
+      throw new HttpException('Sessão sem organização vinculada', 403);
+    }
+    const orgId = (session as { orgId: string }).orgId;
+    const token = await this.store.loadToken(orgId);
     if (!token) throw new HttpException('Token Meta não configurado. Conclua o onboarding.', 404);
 
-    // Auto-refresh se expira em menos de 7 dias
-    if (token.expires_at) {
+    // Auto-refresh apenas para gestores (clientes não têm permissão de renovar)
+    if (session.role === 'agency' && token.expires_at) {
       const daysLeft = (new Date(token.expires_at).getTime() - Date.now()) / 86_400_000;
       if (daysLeft < 7) {
         try {
-          await this._doRefresh(agency.orgId, token.access_token);
-          const refreshed = await this.store.loadToken(agency.orgId);
+          await this._doRefresh(orgId, token.access_token);
+          const refreshed = await this.store.loadToken(orgId);
           return { accessToken: refreshed!.access_token, refreshed: true };
-        } catch { /* retorna token atual; vai falhar na próxima chamada */ }
+        } catch { /* retorna token atual */ }
       }
     }
 
