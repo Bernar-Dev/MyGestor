@@ -31,5 +31,6 @@ export async function GET(request: NextRequest) {
 
     if ("needsOnboarding" in sess) return NextResponse.redirect(`${origin}/onboarding`);
     if (sess.role === "client") return NextResponse.redirect(`${origin}/portal`);
+    // membros e gestores vão para /dashboard (membros verão apenas seus clientes)
     return NextResponse.redirect(`${origin}${next || "/dashboard"}`);
 }

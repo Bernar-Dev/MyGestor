@@ -4,6 +4,7 @@ import { HttpError } from '../exceptions/http-error';
 import {
   AgencySession,
   ClientSession,
+  MemberSession,
   SessionOrPending,
 } from './types';
 
@@ -11,10 +12,6 @@ import {
 export class OrgService {
   constructor(private readonly supabase: SupabaseService) {}
 
-  /**
-   * Resolve a sessão completa do user já autenticado.
-   * Retorna null se o user não tem profile válido (caso raro).
-   */
   async resolveSession(
     userId: string,
     email: string,
@@ -31,6 +28,7 @@ export class OrgService {
       return { needsOnboarding: true, userId, email };
     }
 
+    // ── Portal client (empresa cliente da agência) ──────────────────────
     if (profile.role === 'client' && profile.client_id) {
       const { data: client } = await svc
         .from('clients')
@@ -47,12 +45,38 @@ export class OrgService {
       };
     }
 
+    // ── Colaborador convidado (member) ──────────────────────────────────
+    if (profile.role === 'member') {
+      const { data: membership } = await svc
+        .from('organization_members')
+        .select('org_id, member_role')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (!membership) return null;
+
+      const { data: access } = await svc
+        .from('member_client_access')
+        .select('client_id')
+        .eq('member_user_id', userId);
+
+      return {
+        role: 'member',
+        userId,
+        email,
+        orgId: membership.org_id,
+        memberRole: (membership.member_role || 'observador') as 'gestor' | 'observador',
+        clientIds: (access || []).map((r: { client_id: string }) => r.client_id),
+      };
+    }
+
+    // ── Gestor sênior (agency) ──────────────────────────────────────────
     const orgId = profile.current_org_id as string | null;
     if (!orgId) {
       const { data: anyMembership } = await svc
         .from('organization_members')
         .select('org_id, role')
         .eq('user_id', userId)
+        .isNull('member_role')      // exclui colaboradores
         .limit(1)
         .maybeSingle();
       if (!anyMembership) {
@@ -72,6 +96,7 @@ export class OrgService {
       .select('role')
       .eq('user_id', userId)
       .eq('org_id', orgId)
+      .isNull('member_role')        // exclui colaboradores
       .maybeSingle();
     if (!membership) {
       return { needsOnboarding: true, userId, email };
@@ -90,7 +115,7 @@ export class OrgService {
     if (!session) throw new HttpError(401, 'Não autenticado');
     if ('needsOnboarding' in session) throw new HttpError(409, 'Onboarding pendente');
     if (session.role !== 'agency') {
-      throw new HttpError(403, 'Acesso restrito a gestores/agências');
+      throw new HttpError(403, 'Acesso restrito a gestores sênior');
     }
     return session;
   }
@@ -102,6 +127,27 @@ export class OrgService {
       throw new HttpError(403, 'Acesso restrito a clientes');
     }
     return session;
+  }
+
+  requireMember(session: SessionOrPending | null | undefined): MemberSession {
+    if (!session) throw new HttpError(401, 'Não autenticado');
+    if ('needsOnboarding' in session) throw new HttpError(409, 'Onboarding pendente');
+    if (session.role !== 'member') {
+      throw new HttpError(403, 'Acesso restrito a colaboradores');
+    }
+    return session;
+  }
+
+  /** Permite gestor sênior OU colaborador (para leitura de clientes) */
+  requireAgencyOrMember(
+    session: SessionOrPending | null | undefined,
+  ): AgencySession | MemberSession {
+    if (!session) throw new HttpError(401, 'Não autenticado');
+    if ('needsOnboarding' in session) throw new HttpError(409, 'Onboarding pendente');
+    if (session.role !== 'agency' && session.role !== 'member') {
+      throw new HttpError(403, 'Acesso não autorizado');
+    }
+    return session as AgencySession | MemberSession;
   }
 
   async createOrganization(opts: {

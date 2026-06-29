@@ -13,7 +13,7 @@
  */
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 
-export type UserRole = "agency" | "client";
+export type UserRole = "agency" | "client" | "member";
 
 export interface AgencySession {
     role: "agency";
@@ -31,7 +31,16 @@ export interface ClientSession {
     orgId: string;
 }
 
-export type Session = AgencySession | ClientSession;
+export interface MemberSession {
+    role: "member";
+    userId: string;
+    email: string;
+    orgId: string;
+    memberRole: "gestor" | "observador";
+    clientIds: string[];
+}
+
+export type Session = AgencySession | ClientSession | MemberSession;
 
 export async function getAuthUser(): Promise<{ id: string; email: string } | null> {
     const supabase = await createClient();
@@ -67,7 +76,29 @@ export async function resolveSession(): Promise<
         return { needsOnboarding: true, userId: user.id, email: user.email };
     }
 
-    // 2) Cliente?
+    // 2) Colaborador convidado?
+    if (profile.role === "member") {
+        const { data: membership } = await svc
+            .from("organization_members")
+            .select("org_id, member_role")
+            .eq("user_id", user.id)
+            .maybeSingle();
+        if (!membership) return null;
+        const { data: access } = await svc
+            .from("member_client_access")
+            .select("client_id")
+            .eq("member_user_id", user.id);
+        return {
+            role: "member" as const,
+            userId: user.id,
+            email: user.email,
+            orgId: membership.org_id,
+            memberRole: (membership.member_role || "observador") as "gestor" | "observador",
+            clientIds: (access || []).map((r: any) => r.client_id as string),
+        };
+    }
+
+    // 3) Cliente portal?
     if (profile.role === "client" && profile.client_id) {
         const { data: client } = await svc
             .from("clients")
@@ -84,7 +115,7 @@ export async function resolveSession(): Promise<
         };
     }
 
-    // 3) Agency — precisa ter org + membership
+    // 4) Agency — precisa ter org + membership
     const orgId = profile.current_org_id;
     if (!orgId) {
         // Tenta achar uma org onde já é member (caso current_org_id não esteja setado)

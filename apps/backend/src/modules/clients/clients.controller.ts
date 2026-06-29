@@ -24,7 +24,7 @@ import {
   PatchClientBody,
   PatchPermissionsBody,
 } from './dto';
-import type { SessionOrPending } from '../../common/org/types';
+import type { SessionOrPending, AgencySession, MemberSession } from '../../common/org/types';
 
 @Controller('clients')
 export class ClientsController {
@@ -38,16 +38,24 @@ export class ClientsController {
 
   @Get()
   async list(@CurrentSession() session: SessionOrPending | null) {
-    const sess = this.org.requireAgency(session);
+    const sess = this.org.requireAgencyOrMember(session) as AgencySession | MemberSession;
     const svc = this.supabase.service();
 
-    const { data, error } = await svc
+    let query = svc
       .from('clients')
       .select(
         'id, name, contact_email, contact_phone, company, status, portal_enabled, auth_user_id, created_at',
       )
       .eq('org_id', sess.orgId)
       .order('created_at', { ascending: false });
+
+    // Membros só veem os clientes que lhes foram atribuídos
+    if (sess.role === 'member') {
+      if (sess.clientIds.length === 0) return { clients: [] };
+      query = query.in('id', sess.clientIds);
+    }
+
+    const { data, error } = await query;
     if (error) throw new HttpError(500, error.message);
 
     const ids = (data ?? []).map((c) => c.id);
@@ -102,7 +110,11 @@ export class ClientsController {
     @CurrentSession() session: SessionOrPending | null,
     @Param('id') id: string,
   ) {
-    const sess = this.org.requireAgency(session);
+    const sess = this.org.requireAgencyOrMember(session) as AgencySession | MemberSession;
+    // Membro só pode ver clientes da sua lista
+    if (sess.role === 'member' && !sess.clientIds.includes(id)) {
+      throw new HttpError(403, 'Acesso não autorizado a este cliente');
+    }
     await this.clients.ensureClientOfOrg(id, sess.orgId);
 
     const svc = this.supabase.service();

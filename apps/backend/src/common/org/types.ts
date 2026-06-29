@@ -1,4 +1,4 @@
-export type UserRole = 'agency' | 'client';
+export type UserRole = 'agency' | 'client' | 'member';
 
 export interface AgencySession {
   role: 'agency';
@@ -16,7 +16,21 @@ export interface ClientSession {
   orgId: string;
 }
 
-export type Session = AgencySession | ClientSession;
+/**
+ * Colaborador convidado pelo gestor sênior.
+ * Tem acesso apenas aos clients em clientIds.
+ * memberRole: 'gestor' pode gerenciar, 'observador' só visualiza.
+ */
+export interface MemberSession {
+  role: 'member';
+  userId: string;
+  email: string;
+  orgId: string;
+  memberRole: 'gestor' | 'observador';
+  clientIds: string[];
+}
+
+export type Session = AgencySession | ClientSession | MemberSession;
 
 export interface OnboardingPending {
   needsOnboarding: true;

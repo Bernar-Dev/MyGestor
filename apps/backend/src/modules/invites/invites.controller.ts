@@ -15,7 +15,7 @@ export class InvitesController {
     const svc = this.supabase.service();
     const { data } = await svc
       .from('client_invitations')
-      .select('id, email, expires_at, accepted_at, client_id, org_id')
+      .select('id, email, expires_at, accepted_at, client_id, org_id, invite_type, member_role')
       .eq('token', token)
       .maybeSingle();
     if (!data) throw new HttpError(404, 'Convite inválido');
@@ -24,19 +24,12 @@ export class InvitesController {
       throw new HttpError(410, 'Convite expirado');
     }
 
-    const { data: client } = await svc
-      .from('clients')
-      .select('name')
-      .eq('id', data.client_id)
-      .single();
     const { data: org } = await svc
       .from('organizations')
       .select('name, logo_url, primary_color')
       .eq('id', data.org_id)
       .single();
 
-    // Verifica se o email já tem conta confirmada (ignora usuários em estado "convidado"
-    // criados pelo inviteUserByEmail, que têm email_confirmed_at = null)
     let userExists = false;
     let userIsGestor = false;
     const { data: usersPage } = await svc.auth.admin.listUsers({ perPage: 1000 });
@@ -48,17 +41,32 @@ export class InvitesController {
       if (found) {
         userExists = true;
         const { data: profile } = await svc
-          .from('profiles')
-          .select('role')
-          .eq('id', found.id)
-          .maybeSingle();
+          .from('profiles').select('role').eq('id', found.id).maybeSingle();
         userIsGestor = profile?.role === 'agency';
       }
     }
 
+    let clientNames: string[] = [];
+    let clientName: string | null = null;
+
+    if (data.invite_type === 'member') {
+      const { data: invClients } = await svc
+        .from('invitation_member_clients')
+        .select('client_id, clients(name)')
+        .eq('invitation_id', data.id);
+      clientNames = (invClients || []).map((r: any) => r.clients?.name).filter(Boolean);
+    } else if (data.client_id) {
+      const { data: client } = await svc
+        .from('clients').select('name').eq('id', data.client_id).single();
+      clientName = client?.name ?? null;
+    }
+
     return {
       email: data.email,
-      client_name: client?.name,
+      invite_type: data.invite_type || 'client',
+      member_role: data.member_role || null,
+      client_name: clientName,
+      client_names: clientNames,
       org_name: org?.name,
       org_logo_url: org?.logo_url,
       org_primary_color: org?.primary_color,
@@ -67,7 +75,6 @@ export class InvitesController {
     };
   }
 
-  /** POST /api/invite/:token/signup — cria conta com senha, já confirmada, e aceita o convite */
   @Public()
   @Post(':token/signup')
   async signup(
@@ -81,7 +88,7 @@ export class InvitesController {
 
     const { data: invite } = await svc
       .from('client_invitations')
-      .select('id, email, expires_at, accepted_at, client_id, org_id')
+      .select('id, email, expires_at, accepted_at, client_id, org_id, invite_type, member_role, created_by')
       .eq('token', token)
       .maybeSingle();
     if (!invite) throw new HttpError(404, 'Convite inválido');
@@ -90,7 +97,6 @@ export class InvitesController {
       throw new HttpError(410, 'Convite expirado');
     }
 
-    // Verifica se usuário já tem conta confirmada (ignora pendentes do inviteUserByEmail)
     const { data: usersPage } = await svc.auth.admin.listUsers({ perPage: 1000 });
     const existing = usersPage?.users?.find(
       (u: { email?: string | null; email_confirmed_at?: string | null }) =>
@@ -100,46 +106,25 @@ export class InvitesController {
       throw new HttpError(409, 'Você já tem uma conta com este email. Use sua senha para entrar.');
     }
 
-    // Usuário pode existir em estado "convidado" (sem senha) — atualiza ou cria
     const pending = usersPage?.users?.find(
-      (u: { email?: string | null }) => u.email?.toLowerCase() === invite.email.toLowerCase(),
+      (u: { email?: string | null }) =>
+        u.email?.toLowerCase() === invite.email.toLowerCase(),
     );
 
     let userId: string;
     if (pending) {
-      await svc.auth.admin.updateUserById(pending.id, {
-        password: body.password,
-        email_confirm: true,
-      });
+      await svc.auth.admin.updateUserById(pending.id, { password: body.password, email_confirm: true });
       userId = pending.id;
     } else {
       const { data: created, error: createErr } = await svc.auth.admin.createUser({
-        email: invite.email,
-        password: body.password,
-        email_confirm: true,
+        email: invite.email, password: body.password, email_confirm: true,
       });
       if (createErr) throw new HttpError(500, createErr.message);
       userId = created.user.id;
     }
 
-    // Aceita o convite
-    await svc.from('clients').update({
-      auth_user_id: userId,
-      portal_enabled: true,
-      updated_at: new Date().toISOString(),
-    }).eq('id', invite.client_id);
-
-    await svc.from('profiles').update({
-      role: 'client',
-      client_id: invite.client_id,
-      current_org_id: null,
-    }).eq('id', userId);
-
-    await svc.from('client_invitations')
-      .update({ accepted_at: new Date().toISOString() })
-      .eq('id', invite.id);
-
-    return { ok: true };
+    await this._acceptInvite(svc, invite, userId);
+    return { ok: true, invite_type: invite.invite_type || 'client' };
   }
 
   @Post(':token')
@@ -150,7 +135,7 @@ export class InvitesController {
     const svc = this.supabase.service();
     const { data: invite } = await svc
       .from('client_invitations')
-      .select('id, email, expires_at, accepted_at, client_id, org_id')
+      .select('id, email, expires_at, accepted_at, client_id, org_id, invite_type, member_role, created_by')
       .eq('token', token)
       .maybeSingle();
     if (!invite) throw new HttpError(404, 'Convite inválido');
@@ -160,50 +145,72 @@ export class InvitesController {
     }
 
     if (invite.email.toLowerCase() !== (user.email || '').toLowerCase()) {
-      throw new HttpError(
-        403,
-        `Este convite é para ${invite.email}. Faça login com esse email.`,
-      );
+      throw new HttpError(403, `Este convite é para ${invite.email}. Faça login com esse email.`);
     }
 
-    // Bloqueia se o usuário já é dono de uma agência
     const { data: profile } = await svc
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle();
+      .from('profiles').select('role').eq('id', user.id).maybeSingle();
     if (profile?.role === 'agency') {
-      throw new HttpError(
-        409,
-        'Sua conta já é uma conta de agência e não pode aceitar convites de cliente.',
-      );
+      throw new HttpError(409, 'Contas de gestor sênior não podem aceitar convites.');
     }
 
-    const { error: cErr } = await svc
-      .from('clients')
-      .update({
-        auth_user_id: user.id,
+    await this._acceptInvite(svc, invite, user.id);
+    return {
+      ok: true,
+      redirect: invite.invite_type === 'member' ? '/dashboard' : '/portal',
+    };
+  }
+
+  private async _acceptInvite(svc: any, invite: any, userId: string) {
+    if (invite.invite_type === 'member') {
+      await svc.from('profiles').upsert(
+        { id: userId, role: 'member', current_org_id: null, client_id: null },
+        { onConflict: 'id' },
+      );
+
+      await svc.from('organization_members').upsert(
+        {
+          org_id: invite.org_id,
+          user_id: userId,
+          member_role: invite.member_role || 'observador',
+          invited_by: invite.created_by ?? null,
+        },
+        { onConflict: 'user_id,org_id' },
+      );
+
+      const { data: invClients } = await svc
+        .from('invitation_member_clients')
+        .select('client_id')
+        .eq('invitation_id', invite.id);
+
+      const clientIds = (invClients || []).map((r: any) => r.client_id);
+      if (clientIds.length > 0) {
+        await svc.from('member_client_access').delete()
+          .eq('member_user_id', userId).eq('org_id', invite.org_id);
+        await svc.from('member_client_access').insert(
+          clientIds.map((cid: string) => ({
+            member_user_id: userId,
+            org_id: invite.org_id,
+            client_id: cid,
+          })),
+        );
+      }
+    } else {
+      // Convite de portal (cliente da agência)
+      await svc.from('clients').update({
+        auth_user_id: userId,
         portal_enabled: true,
         updated_at: new Date().toISOString(),
-      })
-      .eq('id', invite.client_id);
-    if (cErr) throw new HttpError(500, cErr.message);
+      }).eq('id', invite.client_id);
 
-    const { error: pErr } = await svc
-      .from('profiles')
-      .update({
-        role: 'client',
-        client_id: invite.client_id,
-        current_org_id: null,
-      })
-      .eq('id', user.id);
-    if (pErr) throw new HttpError(500, pErr.message);
+      await svc.from('profiles').upsert(
+        { id: userId, role: 'client', client_id: invite.client_id, current_org_id: null },
+        { onConflict: 'id' },
+      );
+    }
 
-    await svc
-      .from('client_invitations')
+    await svc.from('client_invitations')
       .update({ accepted_at: new Date().toISOString() })
       .eq('id', invite.id);
-
-    return { ok: true, redirect: '/portal' };
   }
 }

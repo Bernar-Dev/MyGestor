@@ -3,12 +3,15 @@ import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch } from "@/lib/api-client";
-import { Loader2, BarChart3, AlertCircle, CircleCheck, LogIn, UserPlus } from "lucide-react";
+import { Loader2, BarChart3, AlertCircle, LogIn, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 interface InviteInfo {
     email: string;
-    client_name: string;
+    invite_type: "client" | "member";
+    member_role: "gestor" | "observador" | null;
+    client_name: string | null;
+    client_names: string[];
     org_name: string;
     org_logo_url: string | null;
     org_primary_color: string | null;
@@ -44,30 +47,31 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
         if (!pwd || pwd.length < 6) { toast.error("Senha deve ter pelo menos 6 caracteres"); return; }
         setBusy(true);
         try {
-            if (mode === "signup") {
-                // Cria conta já confirmada via backend
-                await apiFetch(`/invite/${token}/signup`, { method: "POST", body: { password: pwd } });
+            const destination = info!.invite_type === "member" ? "/dashboard" : "/portal";
 
-                // Login imediato
+            if (mode === "signup") {
+                const result = await apiFetch<{ ok: boolean; invite_type?: string }>(
+                    `/invite/${token}/signup`, { method: "POST", body: { password: pwd } }
+                );
+
                 const { error } = await createClient().auth.signInWithPassword({
                     email: info!.email,
                     password: pwd,
                 });
                 if (error) throw new Error(error.message);
+                toast.success(result.invite_type === "member" ? "Bem-vindo!" : "Bem-vindo ao portal!");
+                router.push(destination);
             } else {
-                // Login com conta existente
                 const { error } = await createClient().auth.signInWithPassword({
                     email: info!.email,
                     password: pwd,
                 });
                 if (error) throw new Error("Senha incorreta. Tente novamente.");
 
-                // Aceita o convite com a sessão criada
                 await apiFetch(`/invite/${token}`, { method: "POST" });
+                toast.success(info!.invite_type === "member" ? "Bem-vindo!" : "Bem-vindo ao portal!");
+                router.push(destination);
             }
-
-            toast.success("Bem-vindo ao portal!");
-            router.push("/portal");
         } catch (e: any) {
             toast.error(e.message || "Erro ao entrar");
         } finally {
@@ -130,14 +134,22 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
 
                 {/* Modo banner */}
                 <div className="rounded-lg p-3 mb-5 text-sm" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    {mode === "signup" ? (
-                        <>
-                            <p><strong>{info.client_name}</strong>, crie uma senha para acessar o portal e acompanhar suas campanhas.</p>
-                        </>
+                    {info.invite_type === "member" ? (
+                        <p>
+                            Você foi convidado como{" "}
+                            <strong style={{ color: info.member_role === "gestor" ? "#a78bfa" : "#34d399" }}>
+                                {info.member_role === "gestor" ? "Gestor" : "Observador"}
+                            </strong>
+                            {info.client_names.length > 0 && (
+                                <> para gerenciar: <strong>{info.client_names.join(", ")}</strong></>
+                            )}
+                            .
+                            {mode === "login" && " Entre com sua senha para aceitar o convite."}
+                        </p>
+                    ) : mode === "signup" ? (
+                        <p><strong>{info.client_name}</strong>, crie uma senha para acessar o portal e acompanhar suas campanhas.</p>
                     ) : (
-                        <>
-                            <p>Encontramos uma conta cadastrada com <strong>{info.email}</strong>. Entre com sua senha para aceitar o convite.</p>
-                        </>
+                        <p>Encontramos uma conta cadastrada com <strong>{info.email}</strong>. Entre com sua senha para aceitar o convite.</p>
                     )}
                 </div>
 
@@ -167,7 +179,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
                             ? <><Loader2 className="w-4 h-4 animate-spin" /> Aguarde...</>
                             : mode === "signup"
                                 ? <><UserPlus className="w-4 h-4" /> Criar conta e entrar</>
-                                : <><LogIn className="w-4 h-4" /> Entrar no portal</>
+                                : <><LogIn className="w-4 h-4" /> {info.invite_type === "member" ? "Entrar e aceitar convite" : "Entrar no portal"}</>
                         }
                     </button>
                 </form>

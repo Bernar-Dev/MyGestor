@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
     ArrowLeft, Loader2, Plus, Trash2, Send, Copy, Check, Save, Mail, Phone, Building, X,
-    BarChart3, Users, Settings2, RefreshCw, AlertCircle,
+    BarChart3, Users, Settings2, RefreshCw, AlertCircle, UserCheck, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { createClient } from "@/lib/supabase/client";
 import KpiGrid from "@/app/dashboard/analytics/components/KpiGrid";
 import InsightsTable from "@/app/dashboard/analytics/components/InsightsTable";
 import DateRangePicker, { DateRangeValue } from "@/app/dashboard/analytics/components/DateRangePicker";
@@ -36,7 +37,15 @@ const PERM_LABELS: { key: string; label: string }[] = [
     { key: "view_audiences", label: "Ver públicos" },
 ];
 
-type Tab = "dados" | "relatorios" | "contas";
+type Tab = "dados" | "relatorios" | "contas" | "colaboradores";
+
+interface Collaborator {
+    userId: string;
+    email: string;
+    memberRole: "gestor" | "observador";
+    clients: { id: string; name: string }[];
+    createdAt: string;
+}
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -71,8 +80,27 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
     const [campaignLoading, setCampaignLoading] = useState(false);
 
+    // Colaboradores
+    const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+    const [colabLoading, setColabLoading] = useState(false);
+    const [showInviteCollab, setShowInviteCollab] = useState(false);
+    const [collabEmail, setCollabEmail] = useState("");
+    const [collabRole, setCollabRole] = useState<"gestor" | "observador">("observador");
+    const [sendingCollab, setSendingCollab] = useState(false);
+    const [isAgency, setIsAgency] = useState(false);
+
     useEffect(() => { save("client-analytics:period", period); }, [period]);
     useEffect(() => { save("client-analytics:compare", compare); }, [compare]);
+
+    // Verifica se o usuário logado é gestor sênior (agency)
+    useEffect(() => {
+        const sb = createClient();
+        sb.auth.getUser().then(({ data: { user } }) => {
+            if (!user) return;
+            sb.from("profiles").select("role").eq("id", user.id).maybeSingle()
+                .then(({ data }) => setIsAgency(data?.role === "agency"));
+        });
+    }, []);
 
     const loadPage = async () => {
         setLoading(true);
@@ -164,6 +192,57 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     }, [selectedCampaignId, fetchCampaignDetail]);
 
     const aggregated = analyticsData.length > 0 ? aggregateRow(analyticsData) : null;
+
+    const loadCollaborators = async () => {
+        setColabLoading(true);
+        try {
+            const data = await apiFetch<{ members: Collaborator[] }>("/members");
+            setCollaborators(data.members.filter(m => m.clients.some(c => c.id === id)));
+        } catch { }
+        finally { setColabLoading(false); }
+    };
+
+    useEffect(() => {
+        if (tab === "colaboradores") loadCollaborators();
+    }, [tab]); // eslint-disable-line
+
+    const inviteCollab = async () => {
+        if (!collabEmail) { toast.error("Email obrigatório"); return; }
+        setSendingCollab(true);
+        try {
+            const res = await apiFetch<{ ok: boolean; inviteUrl: string; emailSent: boolean }>("/members/invite", {
+                method: "POST",
+                body: { email: collabEmail, member_role: collabRole, client_ids: [id] },
+            });
+            if (res.emailSent) {
+                toast.success("Convite enviado para " + collabEmail);
+            } else {
+                toast.success("Link gerado — verifique o console ou configure email");
+            }
+            setShowInviteCollab(false);
+            setCollabEmail("");
+            setCollabRole("observador");
+            loadCollaborators();
+        } catch (e: any) { toast.error(e.message); }
+        finally { setSendingCollab(false); }
+    };
+
+    const removeCollab = async (userId: string) => {
+        if (!confirm("Remover este colaborador da organização?")) return;
+        try {
+            await apiFetch(`/members/${userId}`, { method: "DELETE" });
+            setCollaborators(prev => prev.filter(c => c.userId !== userId));
+            toast.success("Colaborador removido");
+        } catch (e: any) { toast.error(e.message); }
+    };
+
+    const changeCollabRole = async (userId: string, newRole: "gestor" | "observador") => {
+        try {
+            await apiFetch(`/members/${userId}`, { method: "PATCH", body: { member_role: newRole } });
+            setCollaborators(prev => prev.map(c => c.userId === userId ? { ...c, memberRole: newRole } : c));
+            toast.success("Papel alterado");
+        } catch (e: any) { toast.error(e.message); }
+    };
 
     const saveClient = async () => {
         if (!client) return;
@@ -304,9 +383,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             {/* Tabs */}
             <div className="border-b px-4 md:px-6 flex gap-1" style={{ borderColor: "var(--color-glass-border)" }}>
                 {([
-                    { id: "dados" as Tab,      label: "Dados",      icon: Users },
-                    { id: "relatorios" as Tab, label: "Relatórios", icon: BarChart3 },
-                    { id: "contas" as Tab,     label: "Contas",     icon: Settings2 },
+                    { id: "dados" as Tab,           label: "Dados",          icon: Users },
+                    { id: "relatorios" as Tab,       label: "Relatórios",     icon: BarChart3 },
+                    { id: "contas" as Tab,           label: "Contas",         icon: Settings2 },
+                    ...(isAgency ? [{ id: "colaboradores" as Tab, label: "Colaboradores", icon: UserCheck }] : []),
                 ]).map(t => (
                     <button
                         key={t.id}
@@ -577,6 +657,76 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                         )}
                     </section>
                 )}
+                {/* ── TAB: COLABORADORES ── */}
+                {tab === "colaboradores" && (
+                    <section className="glass">
+                        <div className="p-4 md:p-5 border-b flex items-center justify-between" style={{ borderColor: "var(--color-glass-border)" }}>
+                            <div>
+                                <h2 className="font-bold">Colaboradores</h2>
+                                <p className="text-xs muted mt-1">Gestores e observadores com acesso a este cliente</p>
+                            </div>
+                            <button onClick={() => { setShowInviteCollab(true); setCollabEmail(""); setCollabRole("observador"); }} className="btn-primary text-xs">
+                                <Plus className="w-3 h-3" /> Convidar
+                            </button>
+                        </div>
+
+                        {colabLoading ? (
+                            <div className="p-8 flex items-center justify-center gap-2 muted text-sm">
+                                <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
+                            </div>
+                        ) : collaborators.length === 0 ? (
+                            <div className="p-8 text-center muted text-sm">
+                                <UserCheck className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                                <p>Nenhum colaborador adicionado ainda.</p>
+                                <p className="text-xs mt-1">Convide um gestor ou observador para este cliente.</p>
+                            </div>
+                        ) : (
+                            <ul className="divide-y" style={{ borderColor: "var(--color-glass-border)" }}>
+                                {collaborators.map(c => (
+                                    <li key={c.userId} className="p-4 flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold" style={{ background: "rgba(124,58,237,0.2)", color: "#a78bfa" }}>
+                                            {c.email.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium truncate">{c.email}</p>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                <span className="text-xs px-2 py-0.5 rounded-full" style={{
+                                                    background: c.memberRole === "gestor" ? "rgba(124,58,237,0.15)" : "rgba(52,211,153,0.1)",
+                                                    color: c.memberRole === "gestor" ? "#a78bfa" : "#34d399",
+                                                    border: `1px solid ${c.memberRole === "gestor" ? "rgba(124,58,237,0.3)" : "rgba(52,211,153,0.25)"}`,
+                                                }}>
+                                                    {c.memberRole === "gestor" ? "Gestor" : "Observador"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                            <div className="relative">
+                                                <select
+                                                    value={c.memberRole}
+                                                    onChange={e => changeCollabRole(c.userId, e.target.value as "gestor" | "observador")}
+                                                    className="input text-xs"
+                                                    style={{ padding: "0.25rem 1.5rem 0.25rem 0.5rem", appearance: "none" }}
+                                                >
+                                                    <option value="gestor">Gestor</option>
+                                                    <option value="observador">Observador</option>
+                                                </select>
+                                                <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none muted" />
+                                            </div>
+                                            <button
+                                                onClick={() => removeCollab(c.userId)}
+                                                className="btn-secondary p-2"
+                                                style={{ color: "#fca5a5" }}
+                                                title="Remover colaborador"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </section>
+                )}
             </main>
 
             {/* Modal: atribuir conta */}
@@ -596,6 +746,71 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                             ))}
                         </ul>
                     )}
+                </Modal>
+            )}
+
+            {/* Modal: convidar colaborador */}
+            {showInviteCollab && (
+                <Modal onClose={() => setShowInviteCollab(false)} title="Convidar colaborador">
+                    <p className="muted text-sm mb-4">
+                        O colaborador receberá acesso apenas a este cliente com o papel selecionado.
+                    </p>
+                    <div className="space-y-3">
+                        <div>
+                            <label className="label">Email do colaborador</label>
+                            <input
+                                className="input"
+                                type="email"
+                                value={collabEmail}
+                                onChange={e => setCollabEmail(e.target.value)}
+                                placeholder="colaborador@empresa.com"
+                                autoFocus
+                                onKeyDown={e => e.key === "Enter" && inviteCollab()}
+                            />
+                        </div>
+                        <div>
+                            <label className="label">Papel</label>
+                            <div className="flex gap-2">
+                                {(["gestor", "observador"] as const).map(r => (
+                                    <button
+                                        key={r}
+                                        type="button"
+                                        onClick={() => setCollabRole(r)}
+                                        className="flex-1 py-2 text-sm rounded-lg font-medium transition-all"
+                                        style={{
+                                            background: collabRole === r
+                                                ? r === "gestor" ? "rgba(124,58,237,0.25)" : "rgba(52,211,153,0.15)"
+                                                : "rgba(255,255,255,0.04)",
+                                            color: collabRole === r
+                                                ? r === "gestor" ? "#a78bfa" : "#34d399"
+                                                : "rgba(255,255,255,0.4)",
+                                            border: `1px solid ${collabRole === r
+                                                ? r === "gestor" ? "rgba(124,58,237,0.4)" : "rgba(52,211,153,0.3)"
+                                                : "rgba(255,255,255,0.08)"}`,
+                                        }}
+                                    >
+                                        {r === "gestor" ? "Gestor" : "Observador"}
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-xs muted mt-2">
+                                {collabRole === "gestor"
+                                    ? "Gestor pode gerenciar clientes e ver todos os dados."
+                                    : "Observador pode apenas visualizar dados, sem editar."}
+                            </p>
+                        </div>
+                        <button
+                            onClick={inviteCollab}
+                            disabled={sendingCollab}
+                            className="btn-primary w-full justify-center mt-1"
+                            style={{ padding: "0.65rem" }}
+                        >
+                            {sendingCollab
+                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
+                                : <><Send className="w-4 h-4" /> Enviar convite</>
+                            }
+                        </button>
+                    </div>
                 </Modal>
             )}
 

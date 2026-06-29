@@ -15,6 +15,7 @@ import { InvitesModule } from './modules/invites/invites.module';
 import { PortalModule } from './modules/portal/portal.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
 import { MetaModule } from './modules/meta/meta.module';
+import { MembersModule } from './modules/members/members.module';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -34,6 +35,7 @@ const isProd = process.env.NODE_ENV === 'production';
     PortalModule,
     AccountsModule,
     MetaModule,
+    MembersModule,
     ...(isProd ? [] : [DevModule]),
   ],
   providers: [
