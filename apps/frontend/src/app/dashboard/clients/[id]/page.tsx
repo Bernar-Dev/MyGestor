@@ -47,6 +47,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     const [master, setMaster] = useState<MasterAccount[]>([]);
     const [loading, setLoading] = useState(true);
     const [savingClient, setSavingClient] = useState(false);
+    const [dirtyAccounts, setDirtyAccounts] = useState<Set<string>>(new Set());
+    const [savingPerm, setSavingPerm] = useState<string | null>(null);
     const [showAssign, setShowAssign] = useState(false);
     const [showInvite, setShowInvite] = useState(false);
     const [inviteEmail, setInviteEmail] = useState("");
@@ -198,7 +200,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             });
             toast.success("Atribuída");
             setShowAssign(false);
-            loadPage();
+            setAccounts(prev => [...prev, {
+                id: `new-${Date.now()}`,
+                ad_account_id: adAccountId,
+                ad_account_name: acc.name,
+                currency: acc.currency,
+                permissions: { view_campaigns: true, view_insights: true, view_creatives: true, view_budget: true, view_audiences: true },
+            }]);
         } catch (e: any) { toast.error(e.message); }
     };
 
@@ -207,19 +215,28 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         try {
             await apiFetch(`/clients/${id}/accounts?ad_account_id=${encodeURIComponent(adAccountId)}`, { method: "DELETE" });
             toast.success("Removida");
-            loadPage();
+            setAccounts(prev => prev.filter(a => a.ad_account_id !== adAccountId));
+            setDirtyAccounts(prev => { const s = new Set(prev); s.delete(adAccountId); return s; });
         } catch (e: any) { toast.error(e.message); }
     };
 
-    const togglePerm = async (acc: AssignedAccount, key: string) => {
+    const togglePerm = (acc: AssignedAccount, key: string) => {
         const next = { ...acc.permissions, [key]: !acc.permissions[key] };
+        setAccounts(prev => prev.map(a => a.ad_account_id === acc.ad_account_id ? { ...a, permissions: next } : a));
+        setDirtyAccounts(prev => new Set([...prev, acc.ad_account_id]));
+    };
+
+    const savePerms = async (acc: AssignedAccount) => {
+        setSavingPerm(acc.ad_account_id);
         try {
             await apiFetch(`/clients/${id}/accounts`, {
                 method: "PATCH",
-                body: { ad_account_id: acc.ad_account_id, permissions: next },
+                body: { ad_account_id: acc.ad_account_id, permissions: acc.permissions },
             });
-            loadPage();
+            setDirtyAccounts(prev => { const s = new Set(prev); s.delete(acc.ad_account_id); return s; });
+            toast.success("Permissões salvas");
         } catch (e: any) { toast.error(e.message); }
+        finally { setSavingPerm(null); }
     };
 
     const openInvite = () => {
@@ -529,7 +546,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                                                 <Trash2 className="w-3 h-3" />
                                             </button>
                                         </div>
-                                        <div className="flex flex-wrap gap-2">
+                                        <div className="flex flex-wrap gap-2 items-center">
                                             {PERM_LABELS.map(p => (
                                                 <label key={p.key} className="text-xs flex items-center gap-1.5 px-2 py-1 rounded-md" style={{
                                                     background: a.permissions?.[p.key] ? "rgba(52,211,153,0.1)" : "rgba(255,255,255,0.03)",
@@ -540,6 +557,19 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                                                     {p.label}
                                                 </label>
                                             ))}
+                                            {dirtyAccounts.has(a.ad_account_id) && (
+                                                <button
+                                                    onClick={() => savePerms(a)}
+                                                    disabled={savingPerm === a.ad_account_id}
+                                                    className="btn-primary text-xs ml-auto"
+                                                    style={{ padding: "0.25rem 0.75rem" }}
+                                                >
+                                                    {savingPerm === a.ad_account_id
+                                                        ? <><Loader2 className="w-3 h-3 animate-spin" /> Salvando...</>
+                                                        : <><Save className="w-3 h-3" /> Salvar</>
+                                                    }
+                                                </button>
+                                            )}
                                         </div>
                                     </li>
                                 ))}
