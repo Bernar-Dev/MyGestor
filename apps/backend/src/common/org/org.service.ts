@@ -76,7 +76,7 @@ export class OrgService {
         .from('organization_members')
         .select('org_id, role')
         .eq('user_id', userId)
-        .isNull('member_role')      // exclui colaboradores
+        .is('member_role', null)      // exclui colaboradores
         .limit(1)
         .maybeSingle();
       if (!anyMembership) {
@@ -96,7 +96,7 @@ export class OrgService {
       .select('role')
       .eq('user_id', userId)
       .eq('org_id', orgId)
-      .isNull('member_role')        // exclui colaboradores
+      .is('member_role', null)        // exclui colaboradores
       .maybeSingle();
     if (!membership) {
       return { needsOnboarding: true, userId, email };
