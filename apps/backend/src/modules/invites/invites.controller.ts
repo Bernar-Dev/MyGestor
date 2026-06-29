@@ -35,13 +35,23 @@ export class InvitesController {
       .eq('id', data.org_id)
       .single();
 
-    // Verifica se o email já tem conta cadastrada
+    // Verifica se o email já tem conta cadastrada e qual o papel
     let userExists = false;
+    let userIsGestor = false;
     const { data: usersPage } = await svc.auth.admin.listUsers({ perPage: 1000 });
     if (usersPage?.users) {
-      userExists = usersPage.users.some(
+      const found = usersPage.users.find(
         (u: { email?: string | null }) => u.email?.toLowerCase() === data.email.toLowerCase(),
       );
+      if (found) {
+        userExists = true;
+        const { data: profile } = await svc
+          .from('profiles')
+          .select('role')
+          .eq('id', found.id)
+          .maybeSingle();
+        userIsGestor = profile?.role === 'agency';
+      }
     }
 
     return {
@@ -51,6 +61,7 @@ export class InvitesController {
       org_logo_url: org?.logo_url,
       org_primary_color: org?.primary_color,
       user_exists: userExists,
+      user_is_gestor: userIsGestor,
     };
   }
 

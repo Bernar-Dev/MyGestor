@@ -247,6 +247,25 @@ export class ClientsController {
       .maybeSingle();
     if (!client) throw new HttpError(404, 'Cliente não encontrado');
 
+    // Bloqueia convite se o email já pertence a uma conta de gestor
+    const { data: usersPage } = await svc.auth.admin.listUsers({ perPage: 1000 });
+    const existingUser = usersPage?.users?.find(
+      (u: { email?: string | null }) => u.email?.toLowerCase() === body.email.toLowerCase(),
+    );
+    if (existingUser) {
+      const { data: existingProfile } = await svc
+        .from('profiles')
+        .select('role')
+        .eq('id', existingUser.id)
+        .maybeSingle();
+      if (existingProfile?.role === 'agency') {
+        throw new HttpError(
+          409,
+          'Este email já possui uma conta de gestor e não pode ser convidado como cliente.',
+        );
+      }
+    }
+
     await svc
       .from('client_invitations')
       .delete()

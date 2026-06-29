@@ -13,6 +13,7 @@ interface InviteInfo {
     org_logo_url: string | null;
     org_primary_color: string | null;
     user_exists: boolean;
+    user_is_gestor: boolean;
 }
 
 type Mode = "signup" | "login";
@@ -32,7 +33,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
         apiFetch<InviteInfo>(`/invite/${token}`)
             .then(j => {
                 setInfo(j);
-                setMode(j.user_exists ? "login" : "signup");
+                if (!j.user_is_gestor) setMode(j.user_exists ? "login" : "signup");
             })
             .catch((e: any) => setErr(e.message || "Convite inválido ou expirado"))
             .finally(() => setLoading(false));
@@ -92,6 +93,24 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     if (!info) return null;
 
     const color = info.org_primary_color || "#7c3aed";
+
+    if (info.user_is_gestor) return (
+        <main className="min-h-screen flex items-center justify-center p-4">
+            <div className="glass max-w-md w-full p-7 text-center">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)" }}>
+                    <AlertCircle className="w-6 h-6" style={{ color: "#fbbf24" }} />
+                </div>
+                <h2 className="font-bold mb-2">Convite não disponível</h2>
+                <p className="text-sm muted">
+                    O email <strong>{info.email}</strong> já está associado a uma conta de gestor no {info.org_name}.
+                    Contas de gestor não podem aceitar convites de cliente.
+                </p>
+                <p className="text-xs muted mt-3">
+                    Para acessar o portal, use um email diferente ou entre em contato com seu gestor.
+                </p>
+            </div>
+        </main>
+    );
 
     return (
         <main className="min-h-screen flex items-center justify-center p-4">
