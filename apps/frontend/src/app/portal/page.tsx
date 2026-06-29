@@ -29,6 +29,7 @@ import CreativePreview from "@/app/dashboard/analytics/components/CreativePrevie
 import ActiveAdsList from "@/app/dashboard/analytics/components/ActiveAdsList";
 import SmartInsights from "@/app/dashboard/analytics/components/SmartInsights";
 import InsightsTable from "@/app/dashboard/analytics/components/InsightsTable";
+import { SkeletonDashboard, SkeletonAccountDetail, SkeletonCampaignDetail, SkeletonTable } from "@/app/dashboard/analytics/components/Skeleton";
 import CmdK, { CmdItem } from "@/app/dashboard/analytics/components/CmdK";
 
 const DEFAULT_ACCOUNT_METRICS = PRESETS["Diagnóstico"];
@@ -276,8 +277,9 @@ export default function PortalDashboard() {
     );
 
     if (!me) return (
-        <div className="min-h-screen flex items-center justify-center">
-            <Loader2 className="w-6 h-6 animate-spin muted" />
+        <div className="gestor-root" style={{ minHeight: "100vh", padding: "1.5rem 2rem", paddingTop: "5rem" }}>
+            <div className="g-loadbar" />
+            <SkeletonDashboard kpiCount={6} />
         </div>
     );
 
@@ -400,7 +402,7 @@ export default function PortalDashboard() {
                                     </p>
                                 </div>
                                 {loading && accounts.length === 0
-                                    ? <div style={{ padding: "3rem", textAlign: "center" }}><Loader2 className="g-pulse" style={{ width: 28, height: 28, color: "rgba(255,255,255,0.3)", margin: "0 auto" }} /></div>
+                                    ? <SkeletonTable rows={6} cols={6} />
                                     : <InsightsTable
                                         rows={accounts}
                                         selectedMetrics={accountMetrics}
@@ -423,7 +425,7 @@ export default function PortalDashboard() {
                                 <BudgetPacing daily={accountDetail.daily} />
                             )}
                             {loadingDetail
-                                ? <div style={{ display: "flex", justifyContent: "center", padding: "3rem" }}><Loader2 className="g-pulse" style={{ width: 28, height: 28, color: "rgba(255,255,255,0.3)" }} /></div>
+                                ? <SkeletonAccountDetail kpiCount={accountKpis.length || 8} />
                                 : accountDetail && (
                                     <>
                                         {accountDetail.daily.length > 0 && (
@@ -488,7 +490,7 @@ export default function PortalDashboard() {
                             })()}
                             <ActiveAdsList accountId={selectedAccountId} campaignId={selectedCampaignId} />
                             {loadingCampaign
-                                ? <div style={{ display: "flex", justifyContent: "center", padding: "3rem" }}><Loader2 className="g-pulse" style={{ width: 28, height: 28, color: "rgba(255,255,255,0.3)" }} /></div>
+                                ? <SkeletonCampaignDetail kpiCount={campaignKpis.length || 8} />
                                 : <>
                                     <BreakdownsPanel objectId={selectedCampaignId} level="campaign" period={period} />
                                     {campaignDetail && campaignDetail.daily.length > 0 && (
@@ -540,7 +542,7 @@ export default function PortalDashboard() {
                                     </h4>
                                 </div>
                                 {loadingCampaign
-                                    ? <div style={{ display: "flex", justifyContent: "center", padding: "2rem" }}><Loader2 className="g-pulse" style={{ width: 24, height: 24, color: "rgba(255,255,255,0.3)" }} /></div>
+                                    ? <SkeletonTable rows={5} cols={5} />
                                     : <InsightsTable
                                         rows={adsetAds}
                                         selectedMetrics={adMetrics}

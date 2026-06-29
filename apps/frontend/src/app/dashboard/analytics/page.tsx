@@ -33,6 +33,7 @@ import ClientReport from "./components/ClientReport";
 import CmdK, { CmdItem } from "./components/CmdK";
 import InsightsTable from "./components/InsightsTable";
 import SmartInsights from "./components/SmartInsights";
+import { SkeletonDashboard, SkeletonAccountDetail, SkeletonCampaignDetail, SkeletonTable } from "./components/Skeleton";
 import { DEFAULT_KPIS, KpiCtx, aggregateRow } from "./lib/kpis";
 
 // ─────────────────────────────────────────────────────────────
@@ -518,30 +519,6 @@ export default function MeuGestorDashboard() {
         ? `${periodMeta.range.since} → ${periodMeta.range.until}`
         : (period.since && period.until ? `${period.since} → ${period.until}` : (period.preset || "—"));
 
-    // ── Estado: carregando contas gerenciadas ──
-    if (agencyState === "loading") {
-        return (
-            <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <div style={{ textAlign: "center" }}>
-                    <Loader2 style={{ width: 40, height: 40, color: "#4c6ef5", margin: "0 auto 1rem" }} className="g-pulse" />
-                    <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.875rem" }}>Carregando configurações...</p>
-                </div>
-            </div>
-        );
-    }
-
-    // ── Estado: carregando analytics ──
-    if (loading && accounts.length === 0) {
-        return (
-            <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <div style={{ textAlign: "center" }}>
-                    <Loader2 style={{ width: 48, height: 48, color: "#4c6ef5", margin: "0 auto 1rem" }} className="g-pulse" />
-                    <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.875rem" }}>Carregando contas e período comparativo...</p>
-                </div>
-            </div>
-        );
-    }
-
     if (error) {
         const isTokenError = /token|session|oauth|access|authen/i.test(error);
         return (
@@ -684,9 +661,10 @@ export default function MeuGestorDashboard() {
                                         <span>Todas as contas</span>
                                     </button>
                                     {loadingClients ? (
-                                        <div style={{ padding: "0.5rem 1rem", display: "flex", alignItems: "center", gap: 6 }}>
-                                            <Loader2 style={{ width: 12, height: 12, color: "rgba(255,255,255,0.3)" }} className="g-pulse" />
-                                            <span style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.3)" }}>Carregando...</span>
+                                        <div style={{ padding: "0.5rem 1rem 0.25rem", display: "flex", flexDirection: "column", gap: 6 }}>
+                                            {[70, 85, 60].map((w, i) => (
+                                                <div key={i} className="g-skeleton g-skel-line" style={{ width: `${w}%`, animationDelay: `${i * 0.12}s` }} />
+                                            ))}
                                         </div>
                                     ) : clients.length === 0 ? (
                                         <p style={{ padding: "0.5rem 0.85rem", fontSize: "0.72rem", color: "rgba(255,255,255,0.25)" }}>Nenhum cliente</p>
@@ -822,8 +800,13 @@ export default function MeuGestorDashboard() {
                 </header>
 
                 <div className="g-page-pad" style={{ padding: "1.5rem" }}>
+                    {/* ─── Skeleton de carregamento inicial ─── */}
+                    {(agencyState === "loading" || (loading && accounts.length === 0)) && !selectedAccountId && (
+                        <SkeletonDashboard kpiCount={dashboardKpis.length || 6} />
+                    )}
+
                     {/* ========== DASHBOARD ========== */}
-                    {!selectedAccountId && currentPage === "dashboard" && (
+                    {!selectedAccountId && currentPage === "dashboard" && !(agencyState === "loading" || (loading && accounts.length === 0)) && (
                         <div className="g-fade-in" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
                             {/* KPIs editáveis (dashboard agregado) */}
                             <KpiGrid ctx="dashboard" row={dashboardAggRow} selected={dashboardKpis} onOpenPicker={() => setKpiPickerOpen("dashboard")} />
@@ -969,9 +952,7 @@ export default function MeuGestorDashboard() {
                             )}
 
                             {loadingDetail ? (
-                                <div style={{ display: "flex", justifyContent: "center", padding: "3rem" }}>
-                                    <Loader2 className="g-pulse" style={{ width: 28, height: 28, color: "rgba(255,255,255,0.3)" }} />
-                                </div>
+                                <SkeletonAccountDetail kpiCount={accountKpis.length || 8} />
                             ) : accountDetail && (
                                 <>
                                     {/* Charts */}
@@ -1053,9 +1034,7 @@ export default function MeuGestorDashboard() {
                             <ActiveAdsList accountId={selectedAccountId} campaignId={selectedCampaignId} />
 
                             {loadingCampaign ? (
-                                <div style={{ display: "flex", justifyContent: "center", padding: "3rem" }}>
-                                    <Loader2 className="g-pulse" style={{ width: 28, height: 28, color: "rgba(255,255,255,0.3)" }} />
-                                </div>
+                                <SkeletonCampaignDetail kpiCount={campaignKpis.length || 8} />
                             ) : (
                                 <>
                                     {/* Breakdowns da campanha */}
@@ -1129,9 +1108,7 @@ export default function MeuGestorDashboard() {
                                     <p style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)", marginTop: 2 }}>Clique num anúncio para ver o criativo e métricas</p>
                                 </div>
                                 {loadingCampaign ? (
-                                    <div style={{ display: "flex", justifyContent: "center", padding: "2rem" }}>
-                                        <Loader2 className="g-pulse" style={{ width: 24, height: 24, color: "rgba(255,255,255,0.3)" }} />
-                                    </div>
+                                    <SkeletonTable rows={5} cols={5} />
                                 ) : (
                                     <InsightsTable
                                         rows={adsetAds}
