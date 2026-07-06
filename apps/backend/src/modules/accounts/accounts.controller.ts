@@ -49,7 +49,11 @@ export class AccountsController {
       .select('id, account_id, account_name, currency, added_at')
       .eq('org_id', agency.orgId)
       .order('account_name');
-    if (error) throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    if (error) {
+      // Tabela ainda não existe (migration pendente) — retorna vazio sem quebrar o dashboard
+      if ((error as any).code === '42P01') return { success: true, accounts: [] };
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
     return { success: true, accounts: data ?? [] };
   }
 
