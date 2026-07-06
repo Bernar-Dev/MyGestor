@@ -72,3 +72,13 @@ alter table public.client_invitations
         check (member_role in ('gestor', 'observador'));
 alter table public.client_invitations
     add column if not exists created_by   uuid references auth.users(id) on delete set null;
+
+-- 7. client_id precisa ser nullable para convites de colaborador (invite_type='member')
+alter table public.client_invitations
+    alter column client_id drop not null;
+
+-- Recria o index (continua útil para convites de cliente)
+drop index if exists public.idx_invites_client;
+create index if not exists idx_invites_client
+    on public.client_invitations (client_id)
+    where client_id is not null;
