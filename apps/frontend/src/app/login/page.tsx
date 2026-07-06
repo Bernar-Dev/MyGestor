@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { BarChart3, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -86,19 +87,7 @@ function LoginContent() {
         else router.push(next);
     };
 
-    const signUp = async () => {
-        if (!email || !pwd) { setErr("Preencha email e senha"); return; }
-        setBusy(true); setErr("");
-        const { error } = await createClient().auth.signUp({
-            email, password: pwd,
-            options: { emailRedirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
-        });
-        setBusy(false);
-        if (error) { setErr(error.message); return; }
-        toast.success("Conta criada! Verifique seu email.");
-    };
-
-    return (
+return (
         <main className="min-h-screen flex items-center justify-center px-4">
             <div className="glass w-full max-w-md p-7">
                 {(authErrorMsg || hashError) && (
@@ -180,9 +169,9 @@ function LoginContent() {
                             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                             Entrar
                         </button>
-                        <button type="button" onClick={signUp} disabled={busy} className="btn-secondary w-full justify-center text-sm">
+                        <Link href="/signup" className="btn-secondary w-full justify-center text-sm" style={{ display: "inline-flex" }}>
                             Criar conta nova
-                        </button>
+                        </Link>
                     </form>
                 )}
             </div>

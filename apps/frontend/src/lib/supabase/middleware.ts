@@ -61,7 +61,7 @@ export async function updateSession(request: NextRequest) {
     const path = request.nextUrl.pathname;
 
     const isPublic = path === "/" || path.startsWith("/api/health") || path.startsWith("/invite");
-    const isAuth   = path.startsWith("/login") || path.startsWith("/auth");
+    const isAuth   = path.startsWith("/login") || path.startsWith("/auth") || path.startsWith("/signup");
 
     if (!user) {
         if (isPublic || isAuth) return response;
@@ -71,8 +71,8 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
     }
 
-    // Logado tentando acessar login → manda pro dashboard (que roteia cliente/agência).
-    if (path.startsWith("/login")) {
+    // Logado tentando acessar login ou signup → manda pro dashboard.
+    if (path.startsWith("/login") || path.startsWith("/signup")) {
         const url = request.nextUrl.clone();
         url.pathname = "/dashboard";
         url.search = "";
