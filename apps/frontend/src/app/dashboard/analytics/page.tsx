@@ -115,6 +115,9 @@ export default function MeuGestorDashboard() {
     const [cmdkOpen, setCmdkOpen] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(true);
 
+    // Papel do usuário
+    const [isAgency, setIsAgency] = useState<boolean | null>(null);
+
     // Clientes reais
     const [clients, setClients] = useState<ClientRow[]>([]);
     const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -190,8 +193,15 @@ export default function MeuGestorDashboard() {
             .catch(() => { /* ignora — não bloqueia dashboard */ });
     }, []);
 
-    // ── Fetch contas da agência (base) + clientes ──
+    // ── Fetch contas da agência (base) + clientes + role ──
     useEffect(() => {
+        // Verifica role do usuário para controlar visibilidade de "Todas as contas"
+        createClient().auth.getUser().then(({ data: { user } }) => {
+            if (!user) return;
+            createClient().from("profiles").select("role").eq("id", user.id).maybeSingle()
+                .then(({ data }) => setIsAgency(data?.role === "agency"));
+        });
+
         // Contas Meta que o usuário adicionou ao sistema (managed)
         apiFetch<{ success: boolean; accounts: Array<{ account_id: string }> }>("/accounts/managed")
             .then(r => {
@@ -201,10 +211,9 @@ export default function MeuGestorDashboard() {
                     ).join(",");
                     setAgencyAccountIds(ids);
                 }
-                // Se vazio ou tabela não existe → fallback: busca tudo (sem filtro)
                 setAgencyState("ready");
             })
-            .catch(() => setAgencyState("ready")); // tabela não existe ainda → fallback sem filtro
+            .catch(() => setAgencyState("ready"));
 
         // Lista de clientes
         setLoadingClients(true);
@@ -248,6 +257,14 @@ export default function MeuGestorDashboard() {
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // ── Auto-seleciona primeiro cliente para membros (sem "Todas as contas") ──
+    useEffect(() => {
+        if (isAgency === false && clients.length > 0 && !selectedClientId) {
+            selectClient(clients[0]);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAgency, clients]);
 
     // ── Fetch contas ──
     const buildPeriodParams = useCallback(() => {
@@ -652,14 +669,16 @@ export default function MeuGestorDashboard() {
                             </button>
                             {clientsOpen && (
                                 <div>
-                                    {/* Todos */}
-                                    <button
-                                        onClick={() => selectClient(null)}
-                                        className={`g-sidebar-link ${!selectedClientId ? "active" : ""}`}
-                                        style={{ justifyContent: "flex-start", padding: "0.5rem 0.85rem", fontSize: "0.78rem", width: "100%" }}>
-                                        <Building2 style={{ width: 14, height: 14 }} />
-                                        <span>Todas as contas</span>
-                                    </button>
+                                    {/* Todos — só para gestores */}
+                                    {isAgency !== false && (
+                                        <button
+                                            onClick={() => selectClient(null)}
+                                            className={`g-sidebar-link ${!selectedClientId ? "active" : ""}`}
+                                            style={{ justifyContent: "flex-start", padding: "0.5rem 0.85rem", fontSize: "0.78rem", width: "100%" }}>
+                                            <Building2 style={{ width: 14, height: 14 }} />
+                                            <span>Todas as contas</span>
+                                        </button>
+                                    )}
                                     {loadingClients ? (
                                         <div style={{ padding: "0.5rem 1rem 0.25rem", display: "flex", flexDirection: "column", gap: 6 }}>
                                             {[70, 85, 60].map((w, i) => (
