@@ -708,7 +708,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
             {/* Modal: convidar colaborador */}
             {showInviteCollab && (
-                <Modal onClose={() => setShowInviteCollab(false)} title="Convidar colaborador">
+                <Modal onClose={() => { setShowInviteCollab(false); setCollabEmail(""); setCollabRole("observador"); }} title="Convidar colaborador">
                     <p className="muted text-sm mb-4">
                         O colaborador receberá acesso apenas a este cliente com o papel selecionado.
                     </p>
