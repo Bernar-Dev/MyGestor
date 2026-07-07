@@ -164,7 +164,7 @@ export class InvitesController {
   private async _acceptInvite(svc: any, invite: any, userId: string) {
     if (invite.invite_type === 'member') {
       const { error: profErr } = await svc.from('profiles').upsert(
-        { id: userId, role: 'member', current_org_id: null, client_id: null },
+        { id: userId, email: invite.email, role: 'member', current_org_id: null, client_id: null },
         { onConflict: 'id' },
       );
       if (profErr) throw new HttpError(500, `Erro ao configurar perfil: ${profErr.message}`);
