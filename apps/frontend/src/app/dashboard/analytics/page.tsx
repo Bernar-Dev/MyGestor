@@ -117,6 +117,9 @@ export default function MeuGestorDashboard() {
 
     // Papel do usuário
     const [isAgency, setIsAgency] = useState<boolean | null>(null);
+    const [memberRole, setMemberRole] = useState<"gestor" | "observador" | null>(null);
+    // Pode pausar/ativar campanhas: gestores sênior ou membros com role gestor
+    const canEdit = isAgency === true || memberRole === "gestor";
 
     // Clientes reais
     const [clients, setClients] = useState<ClientRow[]>([]);
@@ -195,11 +198,22 @@ export default function MeuGestorDashboard() {
 
     // ── Fetch contas da agência (base) + clientes + role ──
     useEffect(() => {
-        // Verifica role do usuário para controlar visibilidade de "Todas as contas"
-        createClient().auth.getUser().then(({ data: { user } }) => {
+        // Verifica role do usuário para controlar visibilidade e permissões de edição
+        createClient().auth.getUser().then(async ({ data: { user } }) => {
             if (!user) return;
-            createClient().from("profiles").select("role").eq("id", user.id).maybeSingle()
-                .then(({ data }) => setIsAgency(data?.role === "agency"));
+            const sb = createClient();
+            const { data: profile } = await sb.from("profiles").select("role").eq("id", user.id).maybeSingle();
+            const agency = profile?.role === "agency";
+            setIsAgency(agency);
+            if (!agency) {
+                const { data: mem } = await sb
+                    .from("organization_members")
+                    .select("member_role")
+                    .eq("user_id", user.id)
+                    .not("member_role", "is", null)
+                    .maybeSingle();
+                setMemberRole((mem?.member_role as "gestor" | "observador") ?? "observador");
+            }
         });
 
         // Contas Meta que o usuário adicionou ao sistema (managed)
@@ -1024,14 +1038,14 @@ export default function MeuGestorDashboard() {
                                             onRowClick={r => handleSelectCampaign(r.campaign_id)}
                                             onOpenMetricsPicker={() => setPickerOpen("campaign")}
                                             emptyText="Nenhuma campanha com dados no período."
-                                            extraColumnsRight={[{
+                                            extraColumnsRight={canEdit ? [{
                                                 key: "status", label: "Ações", render: (r: any) => (
                                                     <button onClick={() => handleToggleStatus(r.campaign_id, r.status || "ACTIVE", "campaign")} className="g-btn-secondary"
                                                         style={{ padding: "0.25rem 0.55rem", fontSize: "0.65rem" }}>
                                                         {r.status === "PAUSED" ? <span style={{ color: "#34d399" }}>▶ Ativar</span> : <span style={{ color: "#fbbf24" }}>⏸ Pausar</span>}
                                                     </button>
                                                 )
-                                            }]}
+                                            }] : []}
                                         />
                                     </div>
                                 </>
@@ -1136,14 +1150,14 @@ export default function MeuGestorDashboard() {
                                         onRowClick={r => setSelectedAdId(r.ad_id)}
                                         onOpenMetricsPicker={() => setPickerOpen("ad")}
                                         emptyText="Nenhum anúncio com dados no período."
-                                        extraColumnsRight={[{
+                                        extraColumnsRight={canEdit ? [{
                                             key: "status", label: "Ações", render: (r: any) => (
                                                 <button onClick={() => handleToggleStatus(r.ad_id, r.status || "ACTIVE", "ad")} className="g-btn-secondary"
                                                     style={{ padding: "0.25rem 0.55rem", fontSize: "0.65rem" }}>
                                                     {r.status === "PAUSED" ? <span style={{ color: "#34d399" }}>▶ Ativar</span> : <span style={{ color: "#fbbf24" }}>⏸ Pausar</span>}
                                                 </button>
                                             )
-                                        }]}
+                                        }] : []}
                                     />
                                 )}
                             </div>
