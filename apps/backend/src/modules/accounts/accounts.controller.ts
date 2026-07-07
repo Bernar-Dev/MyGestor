@@ -7,7 +7,7 @@ import { OrgService } from '../../common/org/org.service';
 import { MetaStoreService } from '../../common/meta/meta-store.service';
 import { MetaApiService } from '../../common/meta/meta-api.service';
 import { SupabaseService } from '../../common/supabase/supabase.service';
-import type { Session } from '../../common/org/types';
+import type { Session, SessionOrPending } from '../../common/org/types';
 
 /**
  * GET  /api/accounts          — lista todas as contas visíveis pelo token Meta (para picker)
@@ -39,18 +39,47 @@ export class AccountsController {
     }
   }
 
-  /** Lista as contas que a agência escolheu gerenciar */
+  /** Lista as contas que a agência escolheu gerenciar (ou as do membro, se for member) */
   @Get('managed')
-  async listManaged(@CurrentSession() session: Session) {
-    const agency = this.org.requireAgency(session);
+  async listManaged(@CurrentSession() session: SessionOrPending | null) {
+    const sess = this.org.requireAgencyOrMember(session);
     const svc = this.supabase.service();
+
+    // Membro: retorna apenas contas vinculadas aos clientes que ele tem acesso
+    if (sess.role === 'member') {
+      if (sess.clientIds.length === 0) return { success: true, accounts: [] };
+      const { data, error } = await svc
+        .from('client_ad_accounts')
+        .select('id, ad_account_id, ad_account_name, currency')
+        .in('client_id', sess.clientIds);
+      if (error) return { success: true, accounts: [] };
+      // Deduplica por ad_account_id (um mesmo account pode estar em vários clients)
+      const seen = new Set<string>();
+      const unique = (data ?? []).filter((r: any) => {
+        if (seen.has(r.ad_account_id)) return false;
+        seen.add(r.ad_account_id);
+        return true;
+      });
+      return {
+        success: true,
+        accounts: unique.map((r: any) => ({
+          id: r.id,
+          account_id: r.ad_account_id,
+          account_name: r.ad_account_name,
+          currency: r.currency,
+          added_at: null,
+        })),
+      };
+    }
+
+    // Agência: comportamento original
+    const agency = this.org.requireAgency(session);
     const { data, error } = await svc
       .from('org_meta_accounts')
       .select('id, account_id, account_name, currency, added_at')
       .eq('org_id', agency.orgId)
       .order('account_name');
     if (error) {
-      // Tabela ainda não existe (migration pendente) — retorna vazio sem quebrar o dashboard
       if ((error as any).code === '42P01') return { success: true, accounts: [] };
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
