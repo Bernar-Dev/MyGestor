@@ -62,11 +62,23 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
                 toast.success(result.invite_type === "member" ? "Bem-vindo!" : "Bem-vindo ao portal!");
                 router.push(destination);
             } else {
-                const { error } = await createClient().auth.signInWithPassword({
+                const sb = createClient();
+                const { error } = await sb.auth.signInWithPassword({
                     email: info!.email,
                     password: pwd,
                 });
                 if (error) throw new Error("Senha incorreta. Tente novamente.");
+
+                // Verifica se o usuário logado é gestor sênior (não pode aceitar convites)
+                const { data: { user: me } } = await sb.auth.getUser();
+                if (me) {
+                    const { data: profile } = await sb.from("profiles").select("role").eq("id", me.id).maybeSingle();
+                    if (profile?.role === "agency") {
+                        setInfo(prev => prev ? { ...prev, user_is_gestor: true } : prev);
+                        setBusy(false);
+                        return;
+                    }
+                }
 
                 await apiFetch(`/invite/${token}`, { method: "POST" });
                 toast.success(info!.invite_type === "member" ? "Bem-vindo!" : "Bem-vindo ao portal!");
