@@ -81,6 +81,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     const [collabEmail, setCollabEmail] = useState("");
     const [collabRole, setCollabRole] = useState<"gestor" | "observador">("observador");
     const [sendingCollab, setSendingCollab] = useState(false);
+    const [inviteLink, setInviteLink] = useState<string | null>(null);
     const [isAgency, setIsAgency] = useState(false);
 
     useEffect(() => { save("client-analytics:period", period); }, [period]);
@@ -210,13 +211,12 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             });
             if (res.emailSent) {
                 toast.success("Convite enviado para " + collabEmail);
+                setShowInviteCollab(false);
+                setCollabEmail("");
+                setCollabRole("observador");
             } else {
-                try { await navigator.clipboard.writeText(res.inviteUrl); } catch { }
-                toast.success("Link de convite copiado! Cole e envie para " + collabEmail, { duration: 6000 });
+                setInviteLink(res.inviteUrl);
             }
-            setShowInviteCollab(false);
-            setCollabEmail("");
-            setCollabRole("observador");
             loadCollaborators();
         } catch (e: any) { toast.error(e.message); }
         finally { setSendingCollab(false); }
@@ -708,66 +708,94 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
             {/* Modal: convidar colaborador */}
             {showInviteCollab && (
-                <Modal onClose={() => { setShowInviteCollab(false); setCollabEmail(""); setCollabRole("observador"); }} title="Convidar colaborador">
-                    <p className="muted text-sm mb-4">
-                        O colaborador receberá acesso apenas a este cliente com o papel selecionado.
-                    </p>
-                    <div className="space-y-3">
-                        <div>
-                            <label className="label">Email do colaborador</label>
-                            <input
-                                className="input"
-                                type="email"
-                                value={collabEmail}
-                                onChange={e => setCollabEmail(e.target.value)}
-                                placeholder="colaborador@empresa.com"
-                                autoFocus
-                                onKeyDown={e => e.key === "Enter" && inviteCollab()}
-                            />
-                        </div>
-                        <div>
-                            <label className="label">Papel</label>
-                            <div className="flex gap-2">
-                                {(["gestor", "observador"] as const).map(r => (
-                                    <button
-                                        key={r}
-                                        type="button"
-                                        onClick={() => setCollabRole(r)}
-                                        className="flex-1 py-2 text-sm rounded-lg font-medium transition-all"
-                                        style={{
-                                            background: collabRole === r
-                                                ? r === "gestor" ? "rgba(124,58,237,0.25)" : "rgba(52,211,153,0.15)"
-                                                : "rgba(255,255,255,0.04)",
-                                            color: collabRole === r
-                                                ? r === "gestor" ? "#a78bfa" : "#34d399"
-                                                : "rgba(255,255,255,0.4)",
-                                            border: `1px solid ${collabRole === r
-                                                ? r === "gestor" ? "rgba(124,58,237,0.4)" : "rgba(52,211,153,0.3)"
-                                                : "rgba(255,255,255,0.08)"}`,
-                                        }}
-                                    >
-                                        {r === "gestor" ? "Gestor" : "Observador"}
-                                    </button>
-                                ))}
+                <Modal onClose={() => { setShowInviteCollab(false); setCollabEmail(""); setCollabRole("observador"); setInviteLink(null); }} title="Convidar colaborador">
+                    {inviteLink ? (
+                        <div className="space-y-3">
+                            <div className="rounded-lg p-3 text-sm" style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)" }}>
+                                <p className="text-xs mb-1" style={{ color: "#34d399" }}>Convite criado! Envie este link para {collabEmail}:</p>
+                                <p className="text-xs break-all font-mono" style={{ color: "rgba(255,255,255,0.7)" }}>{inviteLink}</p>
                             </div>
-                            <p className="text-xs muted mt-2">
-                                {collabRole === "gestor"
-                                    ? "Gestor pode gerenciar clientes e ver todos os dados."
-                                    : "Observador pode apenas visualizar dados, sem editar."}
-                            </p>
+                            <button
+                                onClick={async () => {
+                                    await navigator.clipboard.writeText(inviteLink).catch(() => {});
+                                    toast.success("Link copiado!");
+                                }}
+                                className="btn-primary w-full justify-center"
+                                style={{ padding: "0.65rem" }}
+                            >
+                                Copiar link
+                            </button>
+                            <button
+                                onClick={() => { setShowInviteCollab(false); setCollabEmail(""); setCollabRole("observador"); setInviteLink(null); }}
+                                className="btn-secondary w-full justify-center"
+                                style={{ padding: "0.65rem" }}
+                            >
+                                Fechar
+                            </button>
                         </div>
-                        <button
-                            onClick={inviteCollab}
-                            disabled={sendingCollab}
-                            className="btn-primary w-full justify-center mt-1"
-                            style={{ padding: "0.65rem" }}
-                        >
-                            {sendingCollab
-                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
-                                : <><Send className="w-4 h-4" /> Enviar convite</>
-                            }
-                        </button>
-                    </div>
+                    ) : (
+                        <>
+                            <p className="muted text-sm mb-4">
+                                O colaborador receberá acesso apenas a este cliente com o papel selecionado.
+                            </p>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="label">Email do colaborador</label>
+                                    <input
+                                        className="input"
+                                        type="email"
+                                        value={collabEmail}
+                                        onChange={e => setCollabEmail(e.target.value)}
+                                        placeholder="colaborador@empresa.com"
+                                        autoFocus
+                                        onKeyDown={e => e.key === "Enter" && inviteCollab()}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="label">Papel</label>
+                                    <div className="flex gap-2">
+                                        {(["gestor", "observador"] as const).map(r => (
+                                            <button
+                                                key={r}
+                                                type="button"
+                                                onClick={() => setCollabRole(r)}
+                                                className="flex-1 py-2 text-sm rounded-lg font-medium transition-all"
+                                                style={{
+                                                    background: collabRole === r
+                                                        ? r === "gestor" ? "rgba(124,58,237,0.25)" : "rgba(52,211,153,0.15)"
+                                                        : "rgba(255,255,255,0.04)",
+                                                    color: collabRole === r
+                                                        ? r === "gestor" ? "#a78bfa" : "#34d399"
+                                                        : "rgba(255,255,255,0.4)",
+                                                    border: `1px solid ${collabRole === r
+                                                        ? r === "gestor" ? "rgba(124,58,237,0.4)" : "rgba(52,211,153,0.3)"
+                                                        : "rgba(255,255,255,0.08)"}`,
+                                                }}
+                                            >
+                                                {r === "gestor" ? "Gestor" : "Observador"}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs muted mt-2">
+                                        {collabRole === "gestor"
+                                            ? "Gestor pode gerenciar clientes e ver todos os dados."
+                                            : "Observador pode apenas visualizar dados, sem editar."}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={inviteCollab}
+                                    disabled={sendingCollab}
+                                    className="btn-primary w-full justify-center mt-1"
+                                    style={{ padding: "0.65rem" }}
+                                >
+                                    {sendingCollab
+                                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
+                                        : <><Send className="w-4 h-4" /> Enviar convite</>
+                                    }
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </Modal>
             )}
 
