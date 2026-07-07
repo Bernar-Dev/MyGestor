@@ -163,12 +163,13 @@ export class InvitesController {
 
   private async _acceptInvite(svc: any, invite: any, userId: string) {
     if (invite.invite_type === 'member') {
-      await svc.from('profiles').upsert(
+      const { error: profErr } = await svc.from('profiles').upsert(
         { id: userId, role: 'member', current_org_id: null, client_id: null },
         { onConflict: 'id' },
       );
+      if (profErr) throw new HttpError(500, `Erro ao configurar perfil: ${profErr.message}`);
 
-      await svc.from('organization_members').upsert(
+      const { error: memErr } = await svc.from('organization_members').upsert(
         {
           org_id: invite.org_id,
           user_id: userId,
@@ -177,6 +178,7 @@ export class InvitesController {
         },
         { onConflict: 'user_id,org_id' },
       );
+      if (memErr) throw new HttpError(500, `Erro ao vincular organização: ${memErr.message}`);
 
       const { data: invClients } = await svc
         .from('invitation_member_clients')

@@ -80,6 +80,32 @@ export class OrgService {
         .limit(1)
         .maybeSingle();
       if (!anyMembership) {
+        // Fallback: pode ser colaborador com profile.role desatualizado
+        const { data: memberMembership } = await svc
+          .from('organization_members')
+          .select('org_id, member_role')
+          .eq('user_id', userId)
+          .not('member_role', 'is', null)
+          .limit(1)
+          .maybeSingle();
+        if (memberMembership) {
+          await svc.from('profiles').upsert(
+            { id: userId, role: 'member', current_org_id: null, client_id: null },
+            { onConflict: 'id' },
+          );
+          const { data: access } = await svc
+            .from('member_client_access')
+            .select('client_id')
+            .eq('member_user_id', userId);
+          return {
+            role: 'member',
+            userId,
+            email,
+            orgId: memberMembership.org_id,
+            memberRole: (memberMembership.member_role || 'observador') as 'gestor' | 'observador',
+            clientIds: (access || []).map((r: { client_id: string }) => r.client_id),
+          };
+        }
         return { needsOnboarding: true, userId, email };
       }
       return {
@@ -99,6 +125,32 @@ export class OrgService {
       .is('member_role', null)        // exclui colaboradores
       .maybeSingle();
     if (!membership) {
+      // Fallback: pode ser colaborador com current_org_id preenchido erroneamente
+      const { data: memberMembership } = await svc
+        .from('organization_members')
+        .select('org_id, member_role')
+        .eq('user_id', userId)
+        .not('member_role', 'is', null)
+        .limit(1)
+        .maybeSingle();
+      if (memberMembership) {
+        await svc.from('profiles').upsert(
+          { id: userId, role: 'member', current_org_id: null, client_id: null },
+          { onConflict: 'id' },
+        );
+        const { data: access } = await svc
+          .from('member_client_access')
+          .select('client_id')
+          .eq('member_user_id', userId);
+        return {
+          role: 'member',
+          userId,
+          email,
+          orgId: memberMembership.org_id,
+          memberRole: (memberMembership.member_role || 'observador') as 'gestor' | 'observador',
+          clientIds: (access || []).map((r: { client_id: string }) => r.client_id),
+        };
+      }
       return { needsOnboarding: true, userId, email };
     }
 
