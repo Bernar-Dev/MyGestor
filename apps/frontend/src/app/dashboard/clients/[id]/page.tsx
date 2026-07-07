@@ -211,7 +211,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             if (res.emailSent) {
                 toast.success("Convite enviado para " + collabEmail);
             } else {
-                toast.success("Link gerado — verifique o console ou configure email");
+                try { await navigator.clipboard.writeText(res.inviteUrl); } catch { }
+                toast.success("Link de convite copiado! Cole e envie para " + collabEmail, { duration: 6000 });
             }
             setShowInviteCollab(false);
             setCollabEmail("");
