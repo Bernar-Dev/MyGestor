@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api-client";
 import {
@@ -63,6 +64,8 @@ interface PeriodMeta { preset?: string; range?: { since: string; until: string }
 // MAIN
 // ─────────────────────────────────────────────────────────────
 export default function MeuGestorDashboard() {
+    const router = useRouter();
+
     const handleLogout = async () => {
         await createClient().auth.signOut();
         window.location.href = "/login";
@@ -552,28 +555,28 @@ export default function MeuGestorDashboard() {
 
     if (error) {
         const isTokenError = /token|session|oauth|access|authen/i.test(error);
+        if (isTokenError) {
+            router.replace("/dashboard/settings");
+            return (
+                <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Loader2 style={{ width: 24, height: 24, color: "rgba(255,255,255,0.4)" }} className="animate-spin" />
+                </div>
+            );
+        }
         return (
             <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div className="g-glass" style={{ padding: "2rem", textAlign: "center", maxWidth: 460 }}>
                     <AlertCircle style={{ width: 48, height: 48, color: "#f87171", margin: "0 auto 1rem" }} />
                     <h3 style={{ color: "white", fontSize: "1.05rem", fontWeight: 700, marginBottom: "0.5rem" }}>
-                        {isTokenError ? "Sessão expirada" : "Erro ao carregar"}
+                        Erro ao carregar
                     </h3>
                     <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.85rem", marginBottom: "1rem" }}>
-                        {isTokenError
-                            ? "O token de acesso ao Meta foi invalidado. Reconecte sua conta para continuar."
-                            : error}
+                        {error}
                     </p>
                     <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center", flexWrap: "wrap" }}>
-                        {isTokenError ? (
-                            <a href="/dashboard/settings" className="g-btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
-                                <Settings style={{ width: 16, height: 16 }} /> Reconectar com Meta
-                            </a>
-                        ) : (
-                            <button onClick={fetchAccounts} className="g-btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
-                                <RefreshCw style={{ width: 16, height: 16 }} /> Tentar novamente
-                            </button>
-                        )}
+                        <button onClick={fetchAccounts} className="g-btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+                            <RefreshCw style={{ width: 16, height: 16 }} /> Tentar novamente
+                        </button>
                         <a href="/dashboard/settings" className="g-btn-secondary" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
                             <Settings style={{ width: 16, height: 16 }} /> Configurações
                         </a>
